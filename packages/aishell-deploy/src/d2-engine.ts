@@ -104,16 +104,65 @@ export async function renderD2(source: string): Promise<string> {
   const d2 = new D2()
   try {
     const compiled = await d2.compile(source, { options: { layout: 'elk' } })
-    return await d2.render(compiled.diagram, {
+    const svg = await d2.render(compiled.diagram, {
       ...compiled.renderOptions,
       pad: 20,
       noXMLTag: true,
     })
+    return withIntrinsicSize(svg)
   } finally {
     // The worker thread holds the WASM instance and its linear memory; without
     // this the process keeps ~600 MB for the lifetime of the agent session.
     await closeD2(d2)
   }
+}
+
+/**
+ * Give the outer `<svg>` an intrinsic size.
+ *
+ * ## Why this is not cosmetic
+ *
+ * D2 emits the outer element with a `viewBox` and no `width`/`height`. In CSS,
+ * an SVG with no intrinsic dimensions is a replaced element with no size, and
+ * the browser falls back to 300×150 — then scales the whole `viewBox` into that
+ * box. A picture of a real account is around 5000×1800, so the scale factor is
+ * roughly 0.06 and a 16px label is drawn at about 1px: the diagram renders, and
+ * is unreadable at any preview size.
+ *
+ * That is not a layout problem to tune — the file is correct, and it has no
+ * size of its own. Declaring one gives the browser something to lay out at its
+ * natural dimensions; whatever container shows it can then scale a legible
+ * image down rather than a legible image already scaled to nothing.
+ *
+ * The values come from the viewBox, which is what D2 computed from the content,
+ * so nothing is guessed. A viewBox D2 did not emit is left alone: a wrong size
+ * would be worse than the default, and the caller's render would be reported
+ * as broken for a reason that is not theirs.
+ *
+ * @param svg - the rendered SVG.
+ * @returns the same SVG with `width` and `height` on the outer element.
+ */
+export function withIntrinsicSize(svg: string): string {
+  const outer = /<svg\b[^>]*>/.exec(svg)
+  if (outer === null) return svg
+  const tag = outer[0]
+  // Already sized: leave it, so this is safe to apply twice.
+  if (/\swidth="/.test(tag) || /\sheight="/.test(tag)) return svg
+
+  const viewBox = /\sviewBox="([^"]*)"/.exec(tag)
+  const parts = viewBox?.[1]?.trim().split(/[\s,]+/) ?? []
+  if (parts.length !== 4) return svg
+  const width = Number(parts[2])
+  const height = Number(parts[3])
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return svg
+  }
+
+  const sized = tag.replace(
+    /^<svg\b/,
+    `<svg width="${width}" height="${height}"`,
+  )
+  return sized + svg.slice(outer.index + tag.length)
 }
 
 /**

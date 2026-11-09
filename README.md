@@ -153,11 +153,21 @@ Use `--tag beta` while the version is a prerelease, so it does not become
 ## DSH version compatibility
 
 DSH is in developer preview — APIs may break between releases. Every plugin
-package declares its `@deepseek-ai/dsh-*` dependencies (peer and dev alike) as
-an explicit enumeration of the four hosts this set has been vetted against:
+package declares its `@deepseek-ai/dsh-*` compatibility range in its own
+`peerDependencies`, and that manifest is the single source: listing the range
+here as well is a second copy that goes stale the moment a release is vetted.
 
+To see what a package supports:
+
+```sh
+node -p "require('./packages/aishell-deploy/package.json').peerDependencies['@deepseek-ai/dsh-tools']"
 ```
-0.2.0-rc.1 || 0.2.1-rc.1 || 0.2.1-rc.2
+
+To add a release to the supported set, extend every range that currently ends at
+the previous one:
+
+```sh
+node scripts/vet-dsh-release.mjs 0.2.2-rc.1
 ```
 
 When upgrading DSH, run `pnpm run typecheck` to catch API changes.

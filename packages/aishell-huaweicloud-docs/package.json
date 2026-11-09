@@ -1,7 +1,7 @@
 {
   "name": "@huaweidevtools/aishell-dsh-huaweicloud-docs",
   "description": "Points DSH's model at Huawei Cloud's product documentation index (support.huaweicloud.com/llms.txt)",
-  "version": "0.0.18",
+  "version": "0.0.19",
   "publishConfig": {
     "access": "public"
   },

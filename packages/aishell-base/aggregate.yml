@@ -1,0 +1,92 @@
+# Aggregate manifest for the aishell base bundle.
+# patchFrom: child packages whose cordis.patch.yml insert rows are merged into
+#   this bundle's patch (row ids namespaced aishell-* so the bundle coexists
+#   with standalone installs of the same package).
+# deps: child packages written into this package's dependencies as workspace:*.
+# override: id-targeted rows whose whole config this layer replaces (rendered
+#   as `- id: <row> / config: {...}`); the value is inline YAML.
+# disable: id-targeted upstream rows switched off in the composed profile.
+patchFrom:
+  - ../aishell-llm
+  - ../aishell-credentials
+  - ../aishell-brand
+  - ../aishell-deploy
+  - ../aishell-huaweicloud-docs
+  - ../aishell-handbook
+  - ../aishell-e2b
+deps:
+  - ../credentials-store
+  - ../aishell-llm
+  - ../aishell-credentials
+  - ../aishell-brand
+  - ../aishell-deploy
+  - ../aishell-huaweicloud-docs
+  - ../aishell-handbook
+  - ../aishell-e2b
+override:
+  # The official base pins the entry-point default to deepseek-official /
+  # deepseek-flash. AI Shell's only chat route is the aishell gateway, so the
+  # default must select it — otherwise a fresh session routes to a provider
+  # whose adapter this bundle disables (NO_ADAPTER) or whose key the user
+  # never set (MISSING_CREDENTIAL).
+  #
+  # Why the reserved id `trial` and not a real model id: the selection is
+  # read through a synchronous Config getter (dsh-agent-default-model's
+  # currentSelection()), so it cannot await a network round trip to discover
+  # what the gateway currently carries — the harness's own design ("catalog
+  # membership is advisory"). A literal real id therefore couples every fresh
+  # session in the deployment to one gateway catalog entry: the day that entry
+  # is dropped, every new session fails on its first message with
+  # AISHELL.1004 until a new bundle is published. `trial` is a reserved alias
+  # the gateway guarantees, so the catalog can move without touching this
+  # line.
+  #
+  # The name states a stage of the user's relationship to the route, not a
+  # property of whatever model it resolves to — which is what lets the gateway
+  # repoint the alias without the id becoming a lie. Its display label comes
+  # from the gateway's `name` field on the /models entry, so the id stays a
+  # durable routing key while the label stays free to change.
+  - agent-default-model: { provider: aishell, model: trial }
+
+  # Session feedback (the Like/Dislike pair and `/feedback`) is uploaded to
+  # AI Shell's own collector instead of the official one.
+  #
+  # Why OTLP and not our own JSON: the official client plugin
+  # (@deepseek-ai/dsh-session-telemetry-otel) already speaks OTLP/HTTP, so
+  # repointing `exporter.url` is the whole client-side change — no new plugin,
+  # no new code to keep in step with the harness. The server side decodes it
+  # with protojson.
+  #
+  # What actually leaves the machine is NOT "one feedback record": the plugin's
+  # FEEDBACK_ONLY mode releases the complete *unhanded session prefix* through
+  # that one feedback event — message text, tool arguments and results, the
+  # system prompt, `cwd`. The official feedback dialog discloses this to the
+  # user before they submit, which is why this ships without an extra consent toggle.
+  #
+  # The whole config is restated because a patch replaces a row's `config`
+  # wholesale (dsh-app-boot's applyEntryPatches does `target[key] = value`).
+  # Omitting `processor` here would silently drop batching and send every
+  # record in its own request.
+  #
+  # timeoutMillis is raised from the official 1000ms: one batch can carry a
+  # whole session prefix (up to maxRequestBytes) over the public internet
+  # through APIG. A timeout is NOT retried — dsh-otel passes `errorCodes: []`
+  # to got, overriding got's default network-error list, so only the status
+  # codes below are retried (verified: a hung server is hit exactly once, and
+  # the export fails silently). A too-tight budget therefore loses the batch
+  # outright rather than retrying it.
+  #
+  # That is also why the timeout is generous rather than tight: too long costs
+  # a slow shutdown, too short costs data.
+  #
+  # DSH_TELEMETRY_OTLP_URL and DSH_TELEMETRY_MODE both still override — an
+  # operator can repoint the collector or switch to DISABLED without
+  # republishing the bundle. Keep both as `!!js` expressions; a literal here
+  # would make the corresponding switch silently stop working.
+  - session-telemetry-otel: { mode: !!js process.env.DSH_TELEMETRY_MODE ?? 'FEEDBACK_ONLY', shutdownTimeoutMillis: 3000, maxRequestBytes: 4000000, exporter: { url: !!js process.env.DSH_TELEMETRY_OTLP_URL ?? 'https://public.aishell.openbuildlab.com/feedback', compression: gzip, timeoutMillis: 3000 }, processor: { scheduledDelayMillis: 10000, maxQueueSize: 2048, maxExportBatchSize: 2048, exportTimeoutMillis: 1500 } }
+disable:
+  - deepseek-account
+  - account-controller
+  - ui-settings-account
+  - llm-deepseek
+  - llm-deepseek-account

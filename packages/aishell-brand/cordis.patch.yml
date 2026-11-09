@@ -1,0 +1,8 @@
+# aishell-brand bundle patch: inserts the brand reskin plugin.
+# Install standalone: `dsh plugin --profile <name> add link:<repo>/packages/aishell-brand`
+# The single row mounts BOTH halves: the host side (no-op Node plugin) and the
+# browser side (injects AI Shell SVG into sidebar.brand.mark/name +
+# conversation.hero.brand.mark, replacing the default DeepSeek fish mark).
+- insert:
+    - id: aishell-brand
+      name: '@huaweidevtools/aishell-dsh-brand'

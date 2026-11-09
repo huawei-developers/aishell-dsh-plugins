@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>示例卡片预览 — AI Shell</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<!-- The shell's OWN theme CSS, lifted verbatim from the installed
+     @deepseek-ai/dsh-client-ui-theme by scripts/render-check/theme-css.mjs.
+     The page used to hand-copy a subset of `--dsw-*` tokens instead, which
+     meant it painted a page missing half the palette — and when the cards
+     began drawing their tiles from the `--dsw-static-*` family, three of the
+     four computed to `transparent` here while rendering correctly in the real
+     product. Loading the real file removes the whole class of mistake. -->
+<link rel="stylesheet" href="./theme.css">
+<style>
+  /* Everything the cards read comes from theme.css above — the shell's real
+     tokens, including the `data-ds-dark-theme` block. What is left here is
+     only what the DOUBLES need, and the values that depend on the theme are
+     set from the real tokens rather than repeated.
+
+     The dark theme is switched on by `data-ds-dark-theme` on <body>, which is
+     exactly how the shell does it — so the palette in play here is the same
+     one the product uses, not a lookalike. */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--dsw-alias-bg-base);
+    color: var(--dsw-alias-label-primary);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+  /* Stand in for the DSH conversation column so the strip is shown at the
+     width it actually gets on a 1280px window. */
+  .stage { display: flex; justify-content: center; padding: 32px 24px; }
+  .column { width: 100%; max-width: 744px; }
+
+  /* ── the shell: hero, workspace row, input card ───────────────────────
+     These are doubles. The class suffixes matter: the component walks from a
+     `[class*="_headline"]` to its parent's own `[class*="_body"]` to find the
+     element it portals into, so the hero here must be shaped like the real
+     one. Anything else and the cards simply do not appear. */
+  .headline { display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .heroMark {
+    width: 34px; height: 34px; border-radius: 10px; background: #cf0a2c;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: 15px; flex: none;
+  }
+  .heroTitle { font-size: 26px; font-weight: 500; line-height: 32px; }
+  /*
+   * These three rules copy the real HeroShell's computed values, and the
+   * copy has to be faithful: `align-items: stretch` on the stack is what
+   * gives `.heroBody` the full 744px. With `center` there instead, the body
+   * shrinks to its content width, and since the strip's viewport is a
+   * `container-type: inline-size` box (its inline size is contained, so it
+   * contributes nothing to a shrink-to-fit calculation), the viewport
+   * collapses to 0 — every card then renders as its 28px icon tile with the
+   * text clipped away. See the note in the page.
+   */
+  .heroStack { display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
+  .heroBody { display: flex; flex-direction: column; gap: 12px; min-width: 0; position: relative; overflow: visible; }
+
+  .composerStack { display: flex; flex-direction: column; gap: 8px; }
+  .heroWorkspaceRow { display: flex; align-items: center; gap: 2px; height: 28px; padding: 0 16px 0 20px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 1px 8px; border-radius: 24px; font-size: 13px; line-height: 20px;
+    color: var(--dsw-alias-label-tertiary);
+  }
+  .chip .dot { width: 13px; height: 13px; border-radius: 3px; background: #cf0a2c; flex: none; }
+  /* The composer card, copied from the shell's own rule (`.uV2eYG_card`):
+     `border: 0`, the panel radius, the input fill, and the soft elevation
+     token — whose `.5px` stroke IS the card's edge. An earlier version of
+     this page wrote a literal `1px solid` border here instead, which both
+     thickened the edge and hid the fact that the suggestion cards had once
+     used the very same shadow token. Getting this right is what makes the
+     "these are different objects" comparison in the page note honest. */
+  .inputCard {
+    min-height: 96px; border: 0;
+    border-radius: var(--dsw-radius-panel); padding: 14px 16px;
+    color: var(--dsw-alias-label-tertiary); font-size: 14px;
+    background: var(--dsw-specific-input-major);
+    --dsw-elevation-stroke-color: var(--dsw-alias-border-l2);
+    box-shadow: var(--dsw-elevation-soft);
+  }
+
+  .controls { display: flex; gap: 8px; margin-top: 24px; flex-wrap: wrap; }
+  .controls button {
+    font: inherit; font-size: 12.5px; padding: 6px 12px; cursor: pointer;
+    border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2);
+    background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary);
+  }
+  .controls button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+  .controls button[aria-pressed="true"] {
+    border-color: var(--dsw-alias-state-business-primary);
+    color: var(--dsw-alias-state-business-primary);
+  }
+  .draftBar {
+    margin-top: 10px; padding: 10px 14px; border-radius: 10px; font-size: 12.5px;
+    border: 1px dashed var(--dsw-alias-border-l2);
+    color: var(--dsw-alias-label-secondary);
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .draftBar b { color: var(--dsw-alias-state-business-primary); }
+  .note {
+    margin-top: 24px; padding: 12px 14px; border-radius: 10px;
+    background: var(--dsw-alias-bg-module-platform);
+    color: var(--dsw-alias-label-secondary); font-size: 12.5px; line-height: 1.75;
+  }
+  .note b { color: var(--dsw-alias-label-primary); }
+  .note code {
+    background: #ffffff14; padding: 1px 5px; border-radius: 4px;
+    font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+</style>
+</head>
+<body data-ds-dark-theme>
+<div class="stage">
+  <div class="column">
+    <div class="composerStack">
+      <!-- The hero. The cards portal into `.heroBody` below.
+           The "Powered by" label is NOT written here: the plugin's own
+           installPoweredBy inserts it through a MutationObserver when apply()
+           runs below, and a hard-coded copy would put two on the page. -->
+      <div class="heroStack pXSMma_stack">
+        <div class="headline pXSMma_headline">
+          <span class="heroMark">AI</span>
+          <span class="heroTitle" id="heroTitle">今天想做点什么？</span>
+        </div>
+        <div class="heroBody pXSMma_body"></div>
+      </div>
+
+      <div class="heroWorkspaceRow">
+        <span class="chip">默认</span>
+        <span class="chip" id="accountChip"><span class="dot"></span>hwc_gaoyusheng</span>
+      </div>
+
+      <div class="inputCard" id="inputCard">描述你想要构建的内容, / 调用指令, @ 文件或对话</div>
+    </div>
+
+    <div class="controls">
+      <button id="toggleBlank" aria-pressed="false">切到「已发送第一条」</button>
+      <button id="lang">切到 English</button>
+      <button id="narrow">窄屏（480px）</button>
+      <button id="wide">宽屏（744px）</button>
+      <button id="toggleMotion" aria-pressed="false">模拟「减少动态效果」</button>
+    </div>
+    <div class="draftBar" id="draft">点击卡片后，填入输入框的内容会显示在这里</div>
+
+    <div class="note">
+      <b>这是预览，不是真实运行环境。</b><br>
+      组件是真的（来自构建产物 <code>lib/client.js</code>），外层的工作区行、输入框、主题是替身。
+      在真实 DSH 里，卡片用 portal 渲染进 hero 自己的内容区（<code>pXSMma_body</code>）——
+      因为 hero 与卡片所在的 <code>conversation.input.dock</code> 之间横着工作区行，
+      靠 margin 挪不过去。<br><br>
+      <b>可以试的：</b>卡片每 1.5 秒自动向右走一张（<b>鼠标悬停上去就停</b>，移开继续）；
+      左右箭头手动切换（环形，4 张卡 4 个位置，可以一直点）；点卡片看下方填入的完整提示词。<br>
+      <b>重点对比：</b>卡片与下方输入框<b>不再共用视觉配方</b>——
+      卡片是<b>半透明底</b>（<code>interactive-bg-hover</code>，悬停换成 <code>interactive-bg-active</code>；
+      这是 DSH 里"可选项"的画法，命令列表、@ 触发列表、分段控件都这样），圆角 12px；
+      输入框是<b>不透明面板</b>（28px 圆角 + <code>elevation-soft</code> 阴影）。
+      注意输入框那道"描边"其实不是 border：<code>elevation-soft</code> 展开后自带一条 0.5px 的描边，
+      卡片之前也用了同一个 token，所以两者的边看起来一样 —— 那才是"像输入框"的真正原因。<br><br>
+      <b>为什么是半透明而不是全透明：</b>全透明的卡片在浅色主题的白底上会整个消失，
+      只剩悬停时才看得见。半透明两边都成立 —— 既不像抠出来的输入框凹槽，也不会在白底上隐形。
+    </div>
+  </div>
+</div>
+
+<script>
+// Capture the bundle's closure factory.
+let captured = null
+window.__ModuleLoader__ = { load(spec) { captured = spec } }
+
+/**
+ * Drivable `prefers-reduced-motion`, so the still-motion case can be seen.
+ * The component subscribes via addEventListener, so the flag must announce
+ * changes at runtime.
+ */
+const motion = { reduced: false, listeners: new Set() }
+window.__setReducedMotion = (value) => {
+  motion.reduced = value
+  for (const fn of motion.listeners) fn({ matches: value })
+}
+const realMatchMedia = window.matchMedia.bind(window)
+window.matchMedia = (query) => {
+  if (!String(query).includes('prefers-reduced-motion')) return realMatchMedia(query)
+  return {
+    media: query,
+    get matches() { return motion.reduced },
+    addEventListener: (_t, fn) => { motion.listeners.add(fn) },
+    removeEventListener: (_t, fn) => { motion.listeners.delete(fn) },
+    addListener: (fn) => { motion.listeners.add(fn) },
+    removeListener: (fn) => { motion.listeners.delete(fn) },
+    onchange: null,
+    dispatchEvent: () => false,
+  }
+}
+</script>
+<script src="./bundle.js"></script>
+<script>
+(() => {
+  const requireShim = (name) => {
+    if (name === 'react') return window.React
+    if (name === 'react-dom') return window.ReactDOM
+    if (name === 'react-dom/client') return window.ReactDOM
+    if (name === 'react/jsx-runtime') {
+      const R = window.React
+      const jsx = (type, props, key) => {
+        const { children, ...rest } = props || {}
+        return R.createElement(type, key === undefined ? rest : { ...rest, key }, children)
+      }
+      return { jsx, jsxs: jsx, Fragment: R.Fragment }
+    }
+    throw new Error('unexpected external: ' + name)
+  }
+
+  const exportsObj = captured.factory(requireShim)
+  let registered = null
+  // Assigned by the locale service stub below; declared here because apply()
+  // runs before the rest of this block.
+  let dicts = null
+  exportsObj.apply({
+    slots: {
+      inject: (_n, fn) => fn(),
+      register: (opts, Comp) => { registered = { opts, Comp }; return () => {} },
+    },
+    // Capture the dictionaries the plugin registers, so the preview shows the
+    // real copy rather than a copy of it.
+    locale: {
+      register: (_ns, d) => { dicts = d; return () => {} },
+    },
+    effect: (fn) => { fn(); return () => {} },
+  })
+  const Comp = registered.Comp
+  if (!dicts) throw new Error('the plugin registered no dictionaries')
+
+  const draftEl = document.getElementById('draft')
+  // The dock band renders here — and, as on the real page, it stays EMPTY:
+  // the cards portal out of it into the hero above.
+  const dock = document.createElement('div')
+  dock.dataset.slot = 'conversation.input.dock'
+  document.querySelector('.heroWorkspaceRow').before(dock)
+  const root = ReactDOM.createRoot(dock)
+
+  let blank = true
+  let locale = 'zh'
+
+  // The component reads its copy through the framework-injected `t`. There is
+  // no framework here, so the preview binds the same two dictionaries the
+  // plugin registers, and re-renders on a switch — exactly what the locale
+  // service does when the active locale changes.
+  const props = {
+    get t() { return (key) => (dicts?.[locale] ?? dicts?.en)?.[key] ?? key },
+    useSession: (sel) => sel({ blank }),
+    useInput: (sel) => sel({ draft: '', phase: 'plain', attachmentIds: [] }),
+    inputActions: {
+      setDraft: (t) => {
+        draftEl.innerHTML = '<b>已填入输入框：</b>\n' + t.replace(/</g, '&lt;')
+      },
+      submit: () => {},
+    },
+  }
+
+  const draw = () => { root.render(React.createElement(Comp, props)) }
+  draw()
+
+  const press = (id, on) => {
+    const el = document.getElementById(id)
+    el.setAttribute('aria-pressed', String(on))
+  }
+
+  document.getElementById('toggleBlank').addEventListener('click', (e) => {
+    blank = !blank
+    e.target.textContent = blank ? '切到「已发送第一条」' : '切回「新建会话」'
+    press('toggleBlank', !blank)
+    draw()
+  })
+
+  const ZH = {
+    heroTitle: '今天想做点什么？',
+    inputCard: '描述你想要构建的内容, / 调用指令, @ 文件或对话',
+    draft: '点击卡片后，填入输入框的内容会显示在这里',
+  }
+  const EN = {
+    heroTitle: 'What would you like to do?',
+    inputCard: 'Describe what you want to build, / for commands, @ for files',
+    draft: 'The prompt a card inserts shows up here',
+  }
+  document.getElementById('lang').addEventListener('click', (e) => {
+    locale = locale === 'zh' ? 'en' : 'zh'
+    e.target.textContent = locale === 'zh' ? '切到 English' : '切回中文'
+    const copy = locale === 'zh' ? ZH : EN
+    document.getElementById('heroTitle').textContent = copy.heroTitle
+    document.getElementById('inputCard').textContent = copy.inputCard
+    draftEl.textContent = copy.draft
+    draw()
+  })
+
+  document.getElementById('narrow').addEventListener('click', () => {
+    document.querySelector('.column').style.maxWidth = '480px'
+  })
+  document.getElementById('wide').addEventListener('click', () => {
+    document.querySelector('.column').style.maxWidth = '744px'
+  })
+
+  document.getElementById('toggleMotion').addEventListener('click', (e) => {
+    const on = e.target.getAttribute('aria-pressed') !== 'true'
+    e.target.setAttribute('aria-pressed', String(on))
+    window.__setReducedMotion(on)
+  })
+})()
+</script>
+</body>
+</html>

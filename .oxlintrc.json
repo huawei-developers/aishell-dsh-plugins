@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc-project/main/npm/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "rules": {
+    "no-unused-vars": "off",
+    "typescript/no-unused-vars": "warn",
+    // Off, not satisfied. Every client package compiles with `jsx: "react-jsx"`,
+    // the automatic runtime, where the JSX transform imports what it needs and
+    // `React` is deliberately not in scope — no file here imports it. The rule
+    // encodes the classic runtime, so it fired on all 100 JSX sites and would
+    // keep firing on every new one. The React plugin's other rules stay on.
+    "react/react-in-jsx-scope": "off"
+  }
+}

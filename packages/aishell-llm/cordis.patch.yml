@@ -1,0 +1,7 @@
+# aishell-llm bundle patch: inserts the aishell LLM gateway adapter.
+# Install standalone: `dsh plugin --profile <name> add link:<repo>/packages/aishell-llm`
+# The single row mounts the host half (LLM adapter reading AK/SK from the
+# credential store). Credentials are managed by aishell-credentials.
+- insert:
+    - id: aishell-llm
+      name: '@huaweidevtools/aishell-dsh-llm'

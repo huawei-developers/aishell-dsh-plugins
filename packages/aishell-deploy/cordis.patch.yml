@@ -1,0 +1,24 @@
+# aishell-deploy bundle patch: mounts the Huawei Cloud tools.
+#
+# The row carries no `config`, and the defaults are what a deployment wants:
+#
+#   - `defaultRegion` is UNSET. A region belongs to each resource, read from the
+#     provider block of the plan, so there is nothing to default — and a
+#     built-in value would provision somewhere nobody chose. Set it only to give
+#     terraform an HW_REGION_NAME fallback for configurations that omit `region`
+#     in their provider block; the value is then used for pricing too, so the
+#     two never disagree.
+#   - `toolCallTimeoutMs` is 10 minutes: terraform_apply of a real network takes
+#     minutes, and a shorter budget reports a timeout on work still in progress.
+#
+# The credential store is the shared `aishell-dsh` one, read per call.
+#
+# This plugin registers tools on `ctx.tools` and one Host route on
+# `ctx.connection.fetch` (`api/aishell/permission`). It spawns nothing.
+#
+# Mount `aishell-credentials` alongside it: that package owns the AK/SK form
+# and the `aishell__auth` tool. Without it this plugin still registers its
+# tools, but every call fails with "not authenticated" until credentials exist.
+- insert:
+    - id: aishell-deploy
+      name: '@huaweidevtools/aishell-dsh-deploy'

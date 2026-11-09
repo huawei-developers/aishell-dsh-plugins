@@ -1,0 +1,867 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>suggestion cards render check</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<!-- The shell's real theme CSS, lifted from the installed
+     @deepseek-ai/dsh-client-ui-theme by theme-css.mjs. The suite deliberately
+     runs in the LIGHT theme (no `data-ds-dark-theme` on <body>), because light
+     is the theme where a translucent fill is hardest — a card that works on
+     white works on the dark ground too.
+
+     Loading the real file rather than hand-copied tokens is not tidiness: the
+     hand-copied block had an OPAQUE `interactive-bg-hover` where the shell's is
+     translucent, and it never defined the `--dsw-static-*` family at all, so
+     the card tiles computed to `transparent` here. Both were caught, and both
+     were artifacts of the copy rather than defects in the card. -->
+<link rel="stylesheet" href="./theme.css">
+<style>
+  /* The shell's real tokens come from theme.css above. Everything below is
+     either a LAYOUT value the theme does not carry (the hero's stack gap, the
+     composer's own geometry) or the composer double's recipe, spelled out from
+     the shell's rule so the card can be compared against the real thing.
+
+     Nothing here redefines a colour the theme already provides: a second
+     definition would shadow the real one and the suite would be measuring the
+     copy. That is exactly how an opaque `interactive-bg-hover` and a missing
+     `--dsw-static-*` family went unnoticed before. */
+  body { margin: 0; font-family: system-ui, sans-serif; }
+  #root { width: 720px; padding: 24px; }
+  /* The hero, as the shell renders it: a stack holding the headline, the
+     "Powered by" label, and the empty content div the strip portals into.
+     The class suffixes must match what `findHeroContent` looks for. */
+  .heroStack { display: flex; flex-direction: column; gap: 12px; }
+  .fakeHeadline { font-size: 26px; font-weight: 500; line-height: 32px; }
+  .fakeBody { display: flex; flex-direction: column; }
+  /* The composer stack the dock band lives in — now empty of the strip,
+     which is the point of the portal. */
+  .stack { display: flex; flex-direction: column; gap: 8px; }
+  .fakeHeroRow { display: flex; align-items: center; height: 28px; padding: 0 20px; }
+  /* The composer card, as the shell actually draws it (`.uV2eYG_card`):
+     `border: 0`, the panel radius, the input fill, and the soft elevation
+     token whose `.5px` stroke is the card's only edge. The card assertions
+     below compare against THIS double, so it has to be the real recipe — a
+     literal `1px solid` border here would misrepresent what the suite is
+     claiming the suggestion card differs from. */
+  .fakeInput { height: 72px; border: 0; border-radius: var(--dsw-radius-panel);
+    background: var(--dsw-specific-input-major);
+    --dsw-elevation-stroke-color: var(--dsw-alias-border-l2);
+    box-shadow: var(--dsw-elevation-soft); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<!-- The hero the shell would render. The strip portals in here. -->
+<div class="heroStack pXSMma_stack">
+  <div class="fakeHeadline pXSMma_headline">Into the Unknown</div>
+  <div class="fakeBody pXSMma_body"></div>
+</div>
+<script>
+window.__ERR__='';
+window.addEventListener('error', e => { window.__ERR__ += (e.message||'') + ' @ ' + (e.filename||'') + ':' + (e.lineno||'') + '; ' });
+window.addEventListener('unhandledrejection', e => { window.__ERR__ += 'rejection: ' + (e.reason && e.reason.message || e.reason) + '; ' });
+// Capture the bundle's factory.
+let captured = null
+window.__ModuleLoader__ = { load(spec) { captured = spec } }
+
+/**
+ * A controllable `matchMedia`, so the harness can drive the reduced-motion
+ * stop condition. The component subscribes through addEventListener, so the
+ * flag has to be settable at runtime and announce itself.
+ */
+const motion = { reduced: true, listeners: new Set() }
+window.setReducedMotion = (value) => {
+  motion.reduced = value
+  for (const fn of motion.listeners) fn({ matches: value })
+}
+const realMatchMedia = window.matchMedia.bind(window)
+window.matchMedia = (query) => {
+  if (!String(query).includes('prefers-reduced-motion')) return realMatchMedia(query)
+  return {
+    media: query,
+    get matches() { return motion.reduced },
+    addEventListener: (_type, fn) => { motion.listeners.add(fn) },
+    removeEventListener: (_type, fn) => { motion.listeners.delete(fn) },
+    addListener: (fn) => { motion.listeners.add(fn) },
+    removeListener: (fn) => { motion.listeners.delete(fn) },
+    onchange: null,
+    dispatchEvent: () => false,
+  }
+}
+</script>
+<script src="./bundle.js"></script>
+<script>
+(async () => {
+  const results = []
+  const record = (name, ok, detail) => results.push({ name, ok, detail })
+
+  const requireShim = (name) => {
+    if (name === 'react') return window.React
+    if (name === 'react-dom') return window.ReactDOM
+    if (name === 'react-dom/client') return window.ReactDOM
+    if (name === 'react/jsx-runtime') {
+      // The bundle imports jsx/jsxs from the automatic runtime.
+      const R = window.React
+      const jsx = (type, props, key) => {
+        const { children, ...rest } = props || {}
+        return R.createElement(type, key === undefined ? rest : { ...rest, key }, children)
+      }
+      return { jsx, jsxs: jsx, Fragment: R.Fragment }
+    }
+    throw new Error('unexpected external: ' + name)
+  }
+
+  if (!captured) { document.title = 'FAIL: bundle did not load';
+    window.__RESULTS__ = [{name:'bundle loads', ok:false, detail:'no load() call'}]; return }
+
+  const exportsObj = captured.factory(requireShim)
+  record('bundle exports apply()', typeof exportsObj.apply === 'function', typeof exportsObj.apply)
+
+  // Mount the component with stub slot props. The component only needs
+  // useSession, inputActions.setDraft, and useInput-free rendering.
+  // Reach the component through the slot registration apply() performs.
+  let registered = null
+  let dicts = null
+  const ctx = {
+    slots: {
+      inject: (name, fn) => { fn() },
+      register: (opts, Comp) => { registered = { opts, Comp }; return () => {} },
+    },
+    locale: { register: (_ns, d) => { dicts = d; return () => {} } },
+    effect: (fn) => { fn(); return () => {} },
+  }
+  try {
+    exportsObj.apply(ctx)
+  } catch (e) {
+    record('apply() runs on a stub ctx', false, String(e))
+  }
+  record('registers into conversation.input.dock',
+    registered?.opts?.name === 'conversation.input.dock', registered?.opts?.name)
+  record('registers with a stable id', registered?.opts?.id === 'aishell-suggestions', registered?.opts?.id)
+  record('declares a locale namespace on the entry',
+    registered?.opts?.locale === 'aishell-brand', registered?.opts?.locale)
+  record('registers both dictionaries', dicts !== null && Object.keys(dicts).length === 2,
+    dicts ? Object.keys(dicts).join('+') : 'none')
+
+  const Comp = registered?.Comp
+  if (!Comp) { window.__RESULTS__ = results; return }
+
+  // Render with blank=true: the New-Session state.
+  const root = ReactDOM.createRoot(document.getElementById('root'))
+  const draftWrites = []
+  let submitCount = 0
+  // The component reads its copy through `t`. Drive it with the zh dictionary
+  // so the assertions can name the strings they expect.
+  const has = (_src, lang, key) => Object.prototype.hasOwnProperty.call(dicts?.[lang] ?? {}, key)
+
+  // Dictionary parity: both locales must carry exactly the same keys, and no
+  // value may be blank. A key present in zh but missing from en renders the
+  // literal key to an English reader, which is the failure this whole
+  // namespace exists to prevent.
+  {
+    const zk = Object.keys(dicts?.zh ?? {}).sort()
+    const ek = Object.keys(dicts?.en ?? {}).sort()
+    record('both dictionaries carry the same keys',
+      JSON.stringify(zk) === JSON.stringify(ek),
+      `zh=${zk.length} en=${ek.length}` + (JSON.stringify(zk) === JSON.stringify(ek) ? '' : ` missing in en: ${zk.filter(k => !ek.includes(k)).join(',')} extra in en: ${ek.filter(k => !zk.includes(k)).join(',')}`))
+    const blank = [...zk, ...ek].filter(k => !(dicts.zh[k] ?? '').trim() || !(dicts.en[k] ?? '').trim())
+    record('no dictionary value is blank', blank.length === 0, blank.join(',') || 'none')
+    // Every card's three keys must resolve in both locales.
+    // Every card must carry all three keys in both locales. The card ids are
+    // read off the dictionary itself (each title key names its card), so this
+    // needs no reach into the bundle's internals.
+    const ids = [...new Set(zk.map(k => k.match(/^suggestion\.([a-z-]+)\.title$/)?.[1]).filter(Boolean))]
+    const missing = []
+    for (const id of ids) {
+      for (const suffix of ['title', 'gloss', 'prompt']) {
+        for (const lang of ['zh', 'en']) {
+          if (!has(null, lang, `suggestion.${id}.${suffix}`)) missing.push(`${lang}:${id}.${suffix}`)
+        }
+      }
+    }
+    // The COUNT is not pinned here. How many cards ship is the strip's own
+    // fact and is asserted against the DOM below; what this checks is that
+    // every card the dictionary declares is complete in both locales, so
+    // adding a card cannot pass by being half-translated.
+    record('every card carries title+gloss+prompt in both locales',
+      missing.length === 0 && ids.length > 0,
+      `${ids.length} cards` + (missing.length ? `, missing ${missing.join(',')}` : ''))
+    window.__CARD_COUNT__ = ids.length
+  }
+  const props = {
+    t: (key) => (dicts?.zh ?? {})[key] ?? key,
+    useSession: (sel) => sel({ blank: true }),
+    useInput: (sel) => sel({ draft: '', phase: 'plain', attachmentIds: [] }),
+    inputActions: {
+      setDraft: (t) => { draftWrites.push(t) },
+      submit: () => { submitCount++ },
+    },
+  }
+  // The portalled output renders into the hero; the dock band renders the
+  // composer stack. Both are on the page, as they are in the shell.
+  root.render(React.createElement('div', { className: 'stack' },
+    React.createElement('div', { className: 'fakeHeroRow' }, 'hero row'),
+    React.createElement(Comp, props),
+    React.createElement('div', { className: 'fakeInput' })
+  ))
+  await new Promise(r => setTimeout(r, 400))
+
+  const body = document.querySelector('.pXSMma_body')
+  const strip = document.querySelector('[data-aishell-suggestions]')
+  record('strip renders when blank', strip !== null, strip ? 'present' : 'absent')
+
+  // The portal is the whole point of this change: the strip must be inside
+  // the hero's content div, NOT in the dock band, even though the dock is
+  // where the entry is registered.
+  record('strip portals into the hero content area',
+    strip !== null && body !== null && body.contains(strip),
+    strip === null ? 'no strip' : `in hero body: ${body?.contains(strip)}`)
+  record('strip is NOT left behind in the dock band',
+    strip !== null && strip.closest('.stack') === null,
+    strip?.closest('.stack')?.className ?? 'not in the composer stack')
+  record('the mount is a marked element inside the hero body',
+    body?.querySelector(':scope > [data-aishell-suggestions-mount]') !== null,
+    body?.children.length + ' child(ren)')
+
+  if (strip) {
+    // The shipped card count, published by the strip itself. Every ring
+    // assertion below is derived from it rather than from a literal, so
+    // adding or removing a card does not need this suite edited — and a
+    // mismatch between the dictionary and the strip is caught here.
+    const n = Number(strip.getAttribute('data-aishell-suggestions'))
+    record('the strip agrees with the dictionary on how many cards exist',
+      n === window.__CARD_COUNT__, `strip=${n} dictionary=${window.__CARD_COUNT__}`)
+
+    // Ring: every card rendered COPIES=3 times.
+    const allCards = strip.querySelectorAll('button')
+    record('renders 3 copies of the cards (ring)', allCards.length === n * 3,
+      `${allCards.length} nodes for ${n} cards x3`)
+
+    // The viewport clips; the track is wider than it.
+    const track = document.querySelector('[data-aishell-suggestion-track]')
+    record('track is marked as a ring', track?.getAttribute('data-aishell-suggestion-track') === 'ring',
+      track?.getAttribute('data-aishell-suggestion-track'))
+    // The viewport CLIPS: the track is far wider than it (that is what a
+    // ring needs — twelve cards to slide through three slots), and
+    // `overflow: hidden` is what keeps the excess off screen. Asserting
+    // scrollWidth <= clientWidth would be asserting the ring has nothing to
+    // slide, which is the opposite of the feature.
+    const clip = getComputedStyle(strip).overflow
+    record('viewport clips the over-wide track', clip === 'hidden' || clip === 'hidden hidden',
+      `overflow=${clip}, track=${track?.getBoundingClientRect().width?.toFixed(0)} viewport=${strip.clientWidth}`)
+    record('the track is wider than the viewport (a ring needs room)',
+      (track?.getBoundingClientRect().width ?? 0) > strip.clientWidth * 2,
+      `track=${track?.getBoundingClientRect().width?.toFixed(0)} viewport=${strip.clientWidth}`)
+
+    // Three cards visible, each a third of the viewport.
+    const visible = [...allCards].filter(c => {
+      const r = c.getBoundingClientRect(), v = strip.getBoundingClientRect()
+      return r.left >= v.left - 1 && r.right <= v.right + 1
+    })
+    record('exactly 3 cards fit the viewport', visible.length === 3, String(visible.length))
+    if (visible.length) {
+      const vw = strip.getBoundingClientRect().width
+      const expected = (vw - 2 * 8) / 3
+      const w = visible[0].getBoundingClientRect().width
+      record('card width is one third of the viewport', Math.abs(w - expected) < 2,
+        `card=${w.toFixed(1)} expected=${expected.toFixed(1)}`)
+      const widths = visible.map(c => c.getBoundingClientRect().width)
+      record('visible cards equal width', Math.max(...widths) - Math.min(...widths) < 0.5,
+        widths.map(x => x.toFixed(1)).join(','))
+    }
+
+    // A card must not be dressed as a composer field. Geometry and behaviour do
+    // not catch this — a card can be laid out perfectly, behave correctly, and
+    // still read as a second input box — so the surface recipe is asserted
+    // separately.
+    //
+    // Two ingredients are what make a card read as a sibling of the composer,
+    // and both are measurable. First, a rung of the same neutral ramp: the
+    // card `bg-module-platform`, the composer `specific-input-major`. Second,
+    // an edge drawn from the SAME token: `--dsw-elevation-soft` expands to
+    // `0 0 0 .5px <stroke-color>, …`, so `border: none` plus that shadow still
+    // has a hairline, exactly like the composer card's. "No border" does not
+    // remove the outline; it only moves it into the shadow.
+    //
+    // So both are asserted positively, against the shell's own recipe for a
+    // CHOICE surface — a translucent ground, `radius-md`, no shadow — rather
+    // than against a list of forbidden colours.
+    //
+    // The fill must be TRANSLUCENT, which is a two-sided claim and is checked
+    // as one: an alpha below 1 keeps it off the "opaque well" side that reads
+    // as an input, and a non-zero alpha keeps it off the "invisible on a white
+    // page" side. A fully transparent card passes a naive "not filled like a
+    // field" test while vanishing in the light theme.
+    //
+    // COVERAGE BOUNDARY, stated honestly: this pins the card's OWN computed
+    // styles and compares them against the composer double this page renders
+    // (`.fakeInput`, which copies the shell's `.uV2eYG_card` recipe). It would
+    // not catch a shared ingredient reintroduced through an ancestor, and the
+    // composer here is a double rather than the real component — so the
+    // comparison is only as good as that double's fidelity, which is why it
+    // is spelled out from the shell's own rule rather than approximated.
+    if (visible.length) {
+      const cs = getComputedStyle(visible[0])
+      // Read the alpha from the parsed colour, not from the text of the
+      // computed value: `rgb(255, 255, 255)` and `rgba(0, 0, 0, 0.06)` both
+      // end in a number, and a regex over the tail reports the BLUE channel
+      // of the opaque one as if it were an alpha.
+      //
+      // Three shapes have to be handled, because the browser picks the form:
+      // `rgb(...)` (opaque), `rgba(...)`/`color(srgb ... / a)` (both end in the
+      // alpha), and the keyword `transparent`, whose computed value has no
+      // digits at all — a numeric parse would report 1 for it and quietly call
+      // an invisible colour opaque.
+      const alphaOf = (colour) => {
+        const c = String(colour).trim()
+        if (c === 'transparent' || c === 'none') return 0
+        const nums = c.match(/[\d.]+/g) ?? []
+        return nums.length >= 4 ? Number(nums[3]) : 1
+      }
+      const alpha = alphaOf(cs.backgroundColor)
+      record('a card is translucent, not an opaque well',
+        alpha > 0 && alpha < 1, `background=${cs.backgroundColor}`)
+      record('a card draws no edge of its own',
+        cs.boxShadow === 'none' && (cs.borderStyle === 'none' || cs.borderWidth === '0px'),
+        `shadow=${cs.boxShadow === 'none' ? 'none' : cs.boxShadow.slice(0, 40)} border=${cs.borderWidth} ${cs.borderStyle}`)
+      const radius = parseFloat(cs.borderTopLeftRadius)
+      record('a card uses the choice radius, not the panel radius',
+        Math.abs(radius - 12) < 1, `${radius}px (panel radius is 28px)`)
+      record('a card is a button, not a text field',
+        visible[0].tagName === 'BUTTON' && cs.cursor === 'pointer',
+        `${visible[0].tagName} cursor=${cs.cursor}`)
+
+      // The claim the whole design rests on, asserted as a DIFFERENCE against
+      // the composer double rather than as absolute values: the two must not
+      // share an edge treatment, and must not share a fill opacity. Either one
+      // alone is enough to make a card read as a field.
+      const composer = document.querySelector('.fakeInput')
+      if (composer !== null) {
+        const ccs = getComputedStyle(composer)
+        record('a card and the composer card do not share an edge',
+          cs.boxShadow !== ccs.boxShadow,
+          `card=${cs.boxShadow === 'none' ? 'none' : 'shadow'} composer=${ccs.boxShadow.slice(0, 30)}`)
+        const calpha = alphaOf(ccs.backgroundColor)
+        record('a card and the composer card do not share a fill',
+          cs.backgroundColor !== ccs.backgroundColor && alpha < calpha,
+          `card alpha=${alpha} composer alpha=${calpha}`)
+        record('a card and the composer card do not share a radius',
+          cs.borderTopLeftRadius !== ccs.borderTopLeftRadius,
+          `card=${cs.borderTopLeftRadius} composer=${ccs.borderTopLeftRadius}`)
+      }
+
+      // ── Each card carries its own hue ───────────────────────────────────
+      // Asserted as a SET property over the four cards, not per-card by name,
+      // so reordering the strip or renaming an id cannot quietly weaken it:
+      // the claim is "four cards, four tiles, four different colours".
+      //
+      // This is the property that makes the row scannable, and it is also the one a
+      // single-accent regression would break while every other check here
+      // still passed.
+      const allTiles = [...document.querySelectorAll('[data-aishell-suggestion-track] > button')]
+        .map(card => card.firstElementChild)
+        .filter(tile => tile !== null)
+        .map(tile => getComputedStyle(tile).backgroundColor)
+      const distinctTiles = new Set(allTiles)
+      // One colour per card: as many distinct tiles as there are cards. Read
+      // off the count the strip published rather than a literal, so the claim
+      // survives the set growing.
+      record('every card tile is a different colour',
+        distinctTiles.size === n,
+        `${distinctTiles.size} distinct across ${allTiles.length} nodes for ${n} cards`)
+      // A tile must be a SOLID block, not a tint: an opaque fill is what gives
+      // the glyph something to sit on. A tint of the hue measures 1.8–2.8
+      // against its own glyph, a solid ground 5.4–9.9.
+      record('a card tile is solid, not a wash of tint',
+        allTiles.length > 0 && allTiles.every(c => alphaOf(c) === 1),
+        allTiles.slice(0, 2).join(' , '))
+      record('the tile is large enough to hold the glyph',
+        (() => { const t = visible[0].firstElementChild
+          return t !== null && t.getBoundingClientRect().width >= 30 })(),
+        `${visible[0].firstElementChild?.getBoundingClientRect().width}px (was 28)`)
+
+      // ── The glyph must be readable on its own tile ──────────────────────
+      // Measured, not assumed, and measured in the theme that is HARDEST. The
+      // suite runs in light mode; the tiles are `--dsw-static-*`, so they are
+      // the same in both — which means a themed glyph colour is a trap. Using
+      // `label-primary-foreground` (white in light, ink in dark) put a white
+      // glyph on a light-blue tile at 2.54 contrast. Nothing about the markup
+      // looked wrong; only the computed ratio showed it.
+      const contrast = (a, b) => {
+        const parse = (c) => (c.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number)
+        const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }
+        const lum = (rgb) => 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2])
+        const l1 = lum(parse(a)), l2 = lum(parse(b))
+        return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05)
+      }
+      const tileContrasts = [...document.querySelectorAll('[data-aishell-suggestion-track] > button')]
+        .map((card) => {
+          const tile = card.firstElementChild
+          const svg = tile?.firstElementChild
+          if (tile == null || svg == null) return null
+          return contrast(getComputedStyle(tile).backgroundColor, getComputedStyle(svg).color)
+        })
+        .filter((v) => v !== null)
+      const worst = Math.min(...tileContrasts)
+      // 4.5 is the WCAG AA bar for text; this is a decorative glyph, but the
+      // solid tile is a strong ground and there is no reason to accept less.
+      record('every glyph is readable on its own tile',
+        tileContrasts.length === n * 3 && worst >= 4.5,
+        `worst ${worst.toFixed(2)} of ${tileContrasts.length} (bar 4.5)`)
+      // The tile must be readable in BOTH themes, and that is a live claim rather
+      // than a definition: the tiles are static, but a themed token creeping
+      // into either the ground or the glyph would break the pairing in one
+      // theme while looking correct in the other. So the dark theme is switched
+      // on and the same ratio is re-measured. This is the check that would have
+      // caught a white glyph on a light-blue tile.
+      const glyphOnTile = () => [...document.querySelectorAll('[data-aishell-suggestion-track] > button')]
+        .map((card) => {
+          const tile = card.firstElementChild
+          const svg = tile?.firstElementChild
+          if (tile == null || svg == null) return null
+          return contrast(getComputedStyle(tile).backgroundColor, getComputedStyle(svg).color)
+        })
+        .filter((v) => v !== null)
+      const tileColours = () => [...document.querySelectorAll('[data-aishell-suggestion-track] > button')]
+        .map((card) => card.firstElementChild)
+        .filter((t) => t !== null)
+        .map((t) => getComputedStyle(t).backgroundColor)
+      const beforeColours = tileColours()
+      document.body.setAttribute('data-ds-dark-theme', '')
+      const darkContrasts = glyphOnTile()
+      const darkWorst = Math.min(...darkContrasts)
+      const afterColours = tileColours()
+      record('every glyph is readable on its tile in the DARK theme too',
+        darkContrasts.length === n * 3 && darkWorst >= 4.5,
+        `worst ${darkWorst.toFixed(2)} of ${darkContrasts.length} (bar 4.5)`)
+      record('the tile colour is identical in both themes',
+        JSON.stringify(beforeColours) === JSON.stringify(afterColours),
+        beforeColours[0] === afterColours[0] ? `both ${beforeColours[0]}` : `${beforeColours[0]} vs ${afterColours[0]}`)
+      document.body.removeAttribute('data-ds-dark-theme')
+
+      // ── The hue wash ────────────────────────────────────────────────────
+      // The card's ground carries a trace of its tile's hue. What has to hold:
+      //
+      //   - each card's ground is tinted, so the wash actually happened, and
+      //     the four grounds differ from each other (the wash is per-card);
+      //   - the ground stays TRANSLUCENT, because that is the property the
+      //     whole recipe rests on and the first thing an over-eager tint would
+      //     break — a high enough percentage lands back on an opaque well.
+      //
+      // The wash is mixed into BOTH ends of the shell's interactive pair, so
+      // hovering still reads as the same surface intensifying. That is a
+      // property of the declaration rather than something the DOM can be asked
+      // about directly; what this CAN check is that the resulting grounds are
+      // four distinct translucent colours.
+      const grounds = [...document.querySelectorAll('[data-aishell-suggestion-track] > button')]
+        .map((card) => getComputedStyle(card).backgroundColor)
+      record('each card ground carries its own tint, and they differ',
+        new Set(grounds).size === n, `${new Set(grounds).size} distinct grounds of ${grounds.length}`)
+      record('the wash keeps the card translucent',
+        grounds.every((g) => alphaOf(g) > 0 && alphaOf(g) < 0.5),
+        `alpha ${alphaOf(grounds[0]).toFixed(3)} (must stay well under 1)`
+        + ` — an opaque ground here would be a second input box again`)
+
+      // ── The wash must not cost legibility ───────────────────────────────
+      // This is the constraint that actually sets the percentage, so it is the
+      // one that has to be asserted. Raising the wash strengthens the tint and
+      // eats the text's contrast against its own card, and the GLOSS is the
+      // binding case rather than the title — it is drawn in `label-tertiary`,
+      // one step weaker, so it crosses the 3:1 bar well before the title
+      // leaves 4.5:1. Measured on the real tokens, the light theme's gloss runs
+      // 3.33 at 0%, 3.14 at 8%, and 2.90 at 14%.
+      //
+      // Without this check a wash of ~14% passes every other assertion in this
+      // file while quietly making the body text of every card unreadable.
+      const textContrast = (fg, bg) => {
+        // Same two-shape problem as `flatten` below: `color(srgb …)` carries
+        // 0–1 components, the legacy forms carry 0–255. Normalised here so the
+        // luminance maths below is on one scale.
+        const parse = (c) => {
+          const scale = c.startsWith('color(') ? 255 : 1
+          return (c.match(/[\d.]+/g) ?? []).slice(0, 3).map((n) => Number(n) * scale)
+        }
+        const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }
+        const lum = (rgb) => 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2])
+        const l1 = lum(parse(fg)), l2 = lum(parse(bg))
+        return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05)
+      }
+      // The card's own ground is translucent, so the text sits on the
+      // COMPOSITE of that ground over the page, not on the ground's colour.
+      //
+      // Two things have to be got right here. The colour may arrive in either of
+      // two shapes, and their components are on DIFFERENT scales:
+      //
+      //   rgba(38, 49, 72, 0.06)                    components are 0–255
+      //   color(srgb 0.267 0.429 0.646 / 0.115)     components are 0–1
+      //
+      // Reading `color(srgb …)` with the 0–255 assumption turns a mid blue into
+      // near-black, and the composite then comes out as a light grey — which
+      // skews the measured contrast and would have had this assertion report a
+      // legibility failure the card does not have. The shape is detected from
+      // its prefix rather than guessed from the digits.
+      const pageBg = getComputedStyle(document.body).backgroundColor
+      const channel = (colour, index) => {
+        const nums = colour.match(/[\d.]+/g) ?? []
+        const raw = Number(nums[index] ?? 0)
+        // `srgb` components are 0–1; the legacy forms are 0–255.
+        return colour.startsWith('color(') ? raw * 255 : raw
+      }
+      const flatten = (fg, bg) => {
+        const a = fg.startsWith('color(')
+          ? (Number((fg.match(/\/\s*([\d.]+)\s*\)/) ?? [])[1] ?? 1))
+          : (fg.match(/[\d.]+/g) ?? []).length >= 4 ? Number((fg.match(/[\d.]+/g) ?? [])[3]) : 1
+        return `rgb(${[0, 1, 2].map((i) => Math.round(a * channel(fg, i) + (1 - a) * channel(bg, i))).join(',')})`
+      }
+      const textChecks = [...document.querySelectorAll('[data-aishell-suggestion-track] > button')].map((card) => {
+        const ground = flatten(getComputedStyle(card).backgroundColor, pageBg)
+        const spans = card.querySelectorAll('span > span')
+        const title = spans[0] !== undefined ? getComputedStyle(spans[0]).color : null
+        const gloss = spans[1] !== undefined ? getComputedStyle(spans[1]).color : null
+        return {
+          title: title === null ? null : textContrast(title, ground),
+          gloss: gloss === null ? null : textContrast(gloss, ground),
+        }
+      }).filter((v) => v.title !== null && v.gloss !== null)
+      const worstGloss = Math.min(...textChecks.map((t) => t.gloss))
+      const worstTitle = Math.min(...textChecks.map((t) => t.title))
+      record('the wash leaves the card titles legible',
+        worstTitle >= 4.5, `worst ${worstTitle.toFixed(2)} of ${textChecks.length} (bar 4.5)`)
+      record('the wash leaves the card glosses legible',
+        worstGloss >= 3.0, `worst ${worstGloss.toFixed(2)} of ${textChecks.length} (bar 3.0 — the binding constraint on the wash %)`)
+
+      // ── The strip keeps a band of its own ──────────────────────────────
+      // The complaint this answers: the cards ran straight into the composer,
+      // so the page read as a row of boxes followed by a bigger box.
+      //
+      // COVERAGE BOUNDARY, stated honestly: this harness's hero is a double
+      // whose workspace row is rendered by the COMPOSER (as it is in the
+      // shell), not under the hero — so the real "cards to composer"
+      // distance cannot be measured here. What IS measurable and IS the
+      // mechanism is the strip's own margin: the band it reserves below
+      // itself. The relative assertion below is what stands in for the
+      // end-to-end distance, which this harness cannot see.
+      //
+      // The assertion is deliberately relational rather than a pixel value:
+      // the space below the strip must exceed the space above it, so the
+      // strip separates from what follows instead of hugging it. Retuning the
+      // numbers does not rewrite the check; collapsing the band fails it.
+      // The margin lives on the strip's own wrapper — the flex row holding the
+      // arrows and the viewport — which is the child of the mount div the
+      // portal is given. It is read there rather than on the mount element,
+      // whose own used margin is 0 because the wrapper's margin does not
+      // collapse through it (the mount is a plain block, but its child is a
+      // flex container, and a flex container's child margins never collapse
+      // out of it).
+      const stripHost = document.querySelector('[data-aishell-suggestions-mount]')
+      const stripWrap = stripHost?.firstElementChild ?? null
+      if (stripWrap !== null) {
+        const m = getComputedStyle(stripWrap).margin
+        const parts = m.split(' ').map(parseFloat)
+        const top = parts[0]
+        const bottom = parts.length >= 3 ? parts[2] : parts[0]
+        record('the strip reserves a band below itself',
+          bottom > 0, `margin top=${top} bottom=${bottom}`)
+        record('the strip has more room below it than above it',
+          bottom > top, `top=${top} bottom=${bottom} (the band separates it from the composer)`)
+        // And the band must actually LAND, not be swallowed by a collapse:
+        // measured, not inferred from the declared style.
+        const hostRect = stripHost.getBoundingClientRect()
+        const wrapRect = stripWrap.getBoundingClientRect()
+        const applied = hostRect.bottom - wrapRect.bottom
+        record('the reserved band survives as real space',
+          Math.abs(applied - bottom) < 1.5, `declared ${bottom}px, applied ${applied.toFixed(1)}px`)
+      }
+    }
+
+    const arrows = document.querySelectorAll('button[aria-label="上一个示例"], button[aria-label="下一个示例"]')
+    record('both arrows render', arrows.length === 2, String(arrows.length))
+
+    // Read which titles are on screen, left to right.
+    // Resolve once the track stops moving. The slide is a CSS transition, so
+    // there is no promise to await — poll the transition property, which the
+    // component leaves as the running curve until the next snap replaces it.
+    // A timeout guards against a transition that never reports as finished.
+    const settle = async () => {
+      const track = document.querySelector('[data-aishell-suggestion-track]')
+      const idle = () => new Promise(r => {
+        const done = () => { track.removeEventListener('transitionend', done); r() }
+        track.addEventListener('transitionend', done, { once: true })
+        setTimeout(done, 1500)
+      })
+      await idle()
+      // One extra tick so the component's own `transitionend` rewind handler
+      // (which snaps the ring back to its twin position) has run.
+      await new Promise(r => setTimeout(r, 60))
+    }
+    const shown = () => [...allCards]
+      .filter(c => { const r = c.getBoundingClientRect(), v = strip.getBoundingClientRect()
+        return r.left >= v.left - 1 && r.right <= v.right + 1 })
+      .map(c => c.querySelector('span > span')?.textContent)
+
+    const titles = [...new Set([...allCards].map(c => c.querySelector('span > span')?.textContent))]
+    const at0 = shown()
+    record('start shows the first three cards', JSON.stringify(at0) === JSON.stringify(titles.slice(0,3)),
+      at0.join(' | '))
+
+    // One click advances ONE card — the ring's defining property. A scroll
+    // range could only produce one distinct position for n cards, because its
+    // range is `content - viewport`. So the ring owes exactly n positions, and
+    // pressing n times must visit all of them and land back where it started.
+    const next = document.querySelector('button[aria-label="下一个示例"]')
+    const prev = document.querySelector('button[aria-label="上一个示例"]')
+    const seen = [at0.join('|')]
+    for (let i = 0; i < n; i++) {
+      next.click()
+      await settle()
+      seen.push(shown().join('|'))
+    }
+    const distinct = new Set(seen)
+    record(`${n} presses visit ${n} distinct windows`, distinct.size === n,
+      `${distinct.size} distinct: ${[...distinct].map(x => x.split('|')[0]).join(' > ')}`)
+    record(`after ${n} presses the ring is back at the start`,
+      seen[n] === seen[0], `${seen[n]} vs ${seen[0]}`)
+
+    // The wrap is visible, not a jump. The window that WRAPS is the one whose
+    // run passes the last card — at `n - VISIBLE + 1` steps in, the window
+    // holds the tail of the list and the head of it together. Derived rather
+    // than written as a literal: with n cards and three visible, that step is
+    // `n - 2`, so it moves when the set does.
+    const wrapAt = n - 2
+    record('the window wraps through the middle',
+      seen[wrapAt].includes(titles[n - 1]) && seen[wrapAt].includes(titles[0]),
+      `step ${wrapAt}: ${seen[wrapAt]}`)
+
+    // Backwards must retrace the same windows. `prev` from the current
+    // position lands on the window one step back from where the walk ended.
+    prev.click()
+    await settle()
+    record('prev retraces the ring', shown().join('|') === seen[n - 1], shown().join('|'))
+
+    // The window must never expose a gap: every visible slot holds a card.
+    let gaps = 0
+    for (let i = 0; i < 8; i++) {
+      next.click()
+      await settle()
+      const r = strip.getBoundingClientRect()
+      const cards = [...allCards].filter(c => { const b = c.getBoundingClientRect()
+        return b.right > r.left + 1 && b.left < r.right - 1 })
+      if (cards.length < 3) gaps++
+    }
+    record('no press ever exposes an empty slot', gaps === 0, `${gaps} gap(s) in 8 presses`)
+
+    // The seam must be INVISIBLE: the visible window may only ever shift by
+    // one card. The track itself jumps several card-widths when the ring
+    // rewinds to its twin position, and that jump is correct — it lands on a
+    // position showing the same three cards. Judging the motion by the track's
+    // transform would therefore flag the design as broken, so this samples
+    // what is actually on screen.
+    //
+    // What this catches: a step that runs BACKWARDS, or that lands on a card
+    // two or more places away without passing through the ones between (a
+    // mis-signed delta, a wrong modulus, a step that jumps copies). Both were
+    // confirmed against deliberate mutants — the reversed one reports a delta
+    // of 3 for four cards.
+    //
+    // What it does NOT catch: a step that advances two cards while animating
+    // through the middle one. The slide is continuous, so the sampler sees the
+    // intervening card as its own window and records two ordinary +1 steps.
+    // Catching that needs the INTENDED delta, which belongs to the press
+    // rather than to the sampled motion; the position assertions above cover
+    // it (`four presses visit four distinct windows` fails on that mutant).
+    //
+    // The window is identified by which cards sit in the leftmost visible
+    // slot, read from the ones whose CENTRE is inside the viewport: a card
+    // straddling an edge is mid-slide, and counting it as either "in" or "out"
+    // by its edge makes the same window repeat from one frame to the next.
+    const cardAt = (index) => [...allCards].find(card => {
+      const r = card.getBoundingClientRect()
+      const v = strip.getBoundingClientRect()
+      const slot = v.left + (index + 0.5) * (r.width + 8)
+      return r.left <= slot && r.right >= slot
+    })
+    const widest = () => {
+      const first = cardAt(0)
+      if (first === undefined) return null
+      return first.querySelector('span > span')?.textContent ?? null
+    }
+    const sampled = []
+    const sampling = { active: true }
+    let previous = null
+    const sampleFrame = () => {
+      if (!sampling.active) return
+      const now = widest()
+      // Record only genuine changes: the leftmost card is the window's
+      // identity, so one entry per position the strip passes through.
+      if (now !== null && now !== previous) { sampled.push(now); previous = now }
+      window.requestAnimationFrame(sampleFrame)
+    }
+    window.requestAnimationFrame(sampleFrame)
+    next.click()
+    await new Promise(r => setTimeout(r, 1400))
+    sampling.active = false
+    const steps = []
+    for (let i = 1; i < sampled.length; i++) {
+      const from = titles.indexOf(sampled[i - 1])
+      const to = titles.indexOf(sampled[i])
+      if (from === -1 || to === -1) { steps.push('?'); continue }
+      steps.push(((to - from) + titles.length) % titles.length)
+    }
+    const bad = steps.filter(s => s !== 1)
+    record('the seam is invisible: the window only ever advances one card',
+      sampled.length >= 2 && bad.length === 0,
+      `passed through ${sampled.length} windows, deltas: ${steps.join(',') || 'none'}`)
+
+    // Click a card: it must write the draft and NOT submit. The card shows a
+    // short title, so the assertion also pins that the PROMPT lands in the
+    // composer — a card that wrote its title would pass a naive length check
+    // on the wrong text.
+    const clickTarget = shown()[0] !== undefined
+      ? [...allCards].find(c => c.querySelector('span > span')?.textContent === shown()[0])
+      : allCards[0]
+    if (clickTarget) {
+      const before = draftWrites.length
+      clickTarget.click()
+      await new Promise(r => setTimeout(r, 50))
+      record('clicking a card writes exactly one draft',
+        draftWrites.length === before + 1, String(draftWrites.length - before))
+      const written = draftWrites[draftWrites.length - 1]
+      const title = clickTarget.querySelector('span > span')?.textContent ?? ''
+      record('the draft is the prompt, not the card title',
+        written !== undefined && written !== title && written.length > title.length,
+        written ? written.slice(0, 34) + '…' : 'nothing')
+      record('no click ever submits the composer', submitCount === 0, String(submitCount))
+    }
+
+    // --- auto-rotation -------------------------------------------------
+    //
+    // Every check above ran with reduced motion ON, so the ring held still
+    // and the position assertions were deterministic. Now the other half:
+    // the strip must advance on its own, yield to the pointer, and resume.
+    const transformOf = () => document.querySelector('[data-aishell-suggestion-track]').style.transform
+    window.setReducedMotion(false)
+    await new Promise(r => setTimeout(r, 100))
+    const autoBefore = transformOf()
+    await new Promise(r => setTimeout(r, 1900))
+    const autoAfter = transformOf()
+    record('auto-rotation advances the ring',
+      autoBefore !== autoAfter, `${autoBefore} -> ${autoAfter}`)
+
+    // Hover must stop it: sample repeatedly across more than one interval so
+    // a single missed step cannot read as a pass.
+    //
+    // Wait for any in-flight slide to land FIRST. Hovering stops the next
+    // step; it does not freeze the one already travelling, and a slide that
+    // finishes after the hover legitimately changes the transform once more.
+    // Sampling straight away would count that landing as "it kept moving" and
+    // fail a working pause.
+    const outer = strip.parentElement
+    outer.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+    await settle()
+    const hoverSamples = [transformOf()]
+    for (let i = 0; i < 4; i++) {
+      await new Promise(r => setTimeout(r, 800))
+      hoverSamples.push(transformOf())
+    }
+    record('hovering pauses auto-rotation',
+      new Set(hoverSamples).size === 1, `${new Set(hoverSamples).size} distinct over 3.2s`)
+
+    // …and leaving resumes it.
+    outer.dispatchEvent(new PointerEvent('pointerout', { bubbles: true }))
+    const resumeBefore = transformOf()
+    await new Promise(r => setTimeout(r, 1900))
+    record('leaving resumes auto-rotation',
+      transformOf() !== resumeBefore, `${resumeBefore} -> ${transformOf()}`)
+
+    // Reduced motion must stop it again — the reader who asked for stillness
+    // must not get a strip that moves on its own.
+    //
+    // Settle first. The check above waits 1900ms against a 1500ms interval, so
+    // the tick it triggered can still be mid-slide (520ms) when sampling
+    // starts; the first frame would then be caught in motion and read as a
+    // second distinct position, failing a strip that had in fact stopped. The
+    // wait is longer than one slide and shorter than one interval, so it lands
+    // between slides.
+    await new Promise(r => setTimeout(r, 900))
+    window.setReducedMotion(true)
+    await new Promise(r => setTimeout(r, 100))
+    const stillSamples = [transformOf()]
+    for (let i = 0; i < 4; i++) {
+      await new Promise(r => setTimeout(r, 800))
+      stillSamples.push(transformOf())
+    }
+    record('reduced motion stops auto-rotation',
+      new Set(stillSamples).size === 1, `${new Set(stillSamples).size} distinct over 3.2s`)
+  }
+
+  // Now re-render with blank=false: the strip must disappear.
+  root.render(React.createElement('div', { className: 'stack' },
+    React.createElement('div', { className: 'fakeHeroRow' }, 'hero row'),
+    React.createElement(Comp, { ...props, useSession: (sel) => sel({ blank: false }) }),
+    React.createElement('div', { className: 'fakeInput' })
+  ))
+  await new Promise(r => setTimeout(r, 300))
+  record('strip disappears once the session is no longer blank',
+    document.querySelector('[data-aishell-suggestions]') === null,
+    document.querySelector('[data-aishell-suggestions]') ? 'still present' : 'gone')
+
+  // …and it must COME BACK on the next New Session. The one-way assertion
+  // above passes on a component that never returns, which is exactly the
+  // defect this round-trip catches: deactivating clears the portal target
+  // from state, and a host that keeps the hero mounted (this page does) then
+  // finds the node still connected and skips re-publishing it, so the strip
+  // is gone for good. A person hits this by sending a message, then clicking
+  // New Session.
+  const roundTrip = () => {
+    const back = document.querySelector('[data-aishell-suggestions]')
+    if (back === null) return { present: false }
+    const track = document.querySelector('[data-aishell-suggestion-track]')
+    const viewport = back.getBoundingClientRect()
+    const visible = [...track.children].filter(c => {
+      const r = c.getBoundingClientRect()
+      return r.left >= viewport.left - 1 && r.right <= viewport.right + 1
+    })
+    return { present: true, width: Math.round(viewport.width), visible: visible.length }
+  }
+  root.render(React.createElement('div', { className: 'stack' },
+    React.createElement('div', { className: 'fakeHeroRow' }, 'hero row'),
+    React.createElement(Comp, props),
+    React.createElement('div', { className: 'fakeInput' })
+  ))
+  await new Promise(r => setTimeout(r, 400))
+  const afterReturn = roundTrip()
+  record('strip returns on the next New Session',
+    afterReturn.present === true, afterReturn.present ? 'present' : 'gone for good')
+  // A strip that came back collapsed would satisfy the line above and still be
+  // useless, so the width and the three visible cards are pinned too.
+  record('the returned strip is laid out, not collapsed',
+    afterReturn.width > 200 && afterReturn.visible === 3,
+    `width=${afterReturn.width} visible=${afterReturn.visible}`)
+
+  // A second round trip, so the fix cannot be a one-shot (state that latches
+  // on the first return and never again).
+  root.render(React.createElement('div', { className: 'stack' },
+    React.createElement('div', { className: 'fakeHeroRow' }, 'hero row'),
+    React.createElement(Comp, { ...props, useSession: (sel) => sel({ blank: false }) }),
+    React.createElement('div', { className: 'fakeInput' })
+  ))
+  await new Promise(r => setTimeout(r, 300))
+  root.render(React.createElement('div', { className: 'stack' },
+    React.createElement('div', { className: 'fakeHeroRow' }, 'hero row'),
+    React.createElement(Comp, props),
+    React.createElement('div', { className: 'fakeInput' })
+  ))
+  await new Promise(r => setTimeout(r, 400))
+  const second = roundTrip()
+  record('a second round trip also returns the strip',
+    second.present === true && second.visible === 3,
+    second.present ? `width=${second.width} visible=${second.visible}` : 'gone for good')
+
+  window.__RESULTS__ = results
+  document.title = results.every(r => r.ok) ? 'ALL PASS' : 'FAILURES'
+})()
+</script>
+</body>
+</html>

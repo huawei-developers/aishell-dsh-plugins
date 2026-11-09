@@ -1,0 +1,65 @@
+{
+  "name": "@huaweidevtools/aishell-dsh-deploy",
+  "description": "Huawei Cloud infrastructure tools for DSH — Terraform, OpenAPI, resource inventory, cost estimates",
+  "version": "0.0.18",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yusheng-g/aishell-dsh-plugins.git",
+    "directory": "packages/aishell-deploy"
+  },
+  "type": "module",
+  "scripts": {
+    "build:bundle": "node ../../scripts/write-deploy-version.mjs && tsdown && node ../../scripts/build-deploy-data.mjs",
+    "prepublishOnly": "node ../../scripts/check-packages.mjs --prepublish --only aishell-deploy"
+  },
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
+  "files": [
+    "lib/index.js",
+    "lib/data/**/*",
+    "lib/types/**/*.d.ts",
+    "cordis.patch.yml"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@huaweidevtools/aishell-dsh-credentials-store": "workspace:*",
+    "@terrastruct/d2": "^0.1.33",
+    "adm-zip": "^0.6.1",
+    "hcl2-parser": "^1.0.3",
+    "jsonpath-plus": "^10.4.0",
+    "zod": "^4.2.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-client-connection": "0.2.0-rc.1 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4 || 0.2.1-rc.5",
+    "@deepseek-ai/dsh-llm": "0.2.0-rc.1 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4 || 0.2.1-rc.5",
+    "@deepseek-ai/dsh-system-prompt": "0.2.0-rc.1 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4 || 0.2.1-rc.5",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.1 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4 || 0.2.1-rc.5"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/cordis-plugin-loader": "^1.0.5",
+    "@deepseek-ai/dsh-client-connection": "0.2.0-rc.1 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4 || 0.2.1-rc.5",
+    "@deepseek-ai/dsh-llm": "0.2.0-rc.1 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4 || 0.2.1-rc.5",
+    "@deepseek-ai/dsh-system-prompt": "0.2.0-rc.1 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4 || 0.2.1-rc.5",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.1 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4 || 0.2.1-rc.5",
+    "@deepseek-ai/schemastery": "3.18.4",
+    "tsdown": "^0.10.0",
+    "typescript": "^5.7.0",
+    "zod": "^4.2.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

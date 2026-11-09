@@ -1,0 +1,1668 @@
+[
+ {
+  "id": "0e1e865a-9702-4258-9fb5-e66996495f7f",
+  "name": "aishell-turbo-cce-control-l861o",
+  "provider": "vpc",
+  "type": "securityGroups",
+  "properties": {
+   "description": "Do not delete or update this security group which is created by CCE cluster e1abefa4-c6d3-11f1-968b-0255ac100244 for the master port",
+   "security_group_rules": [
+    {
+     "ethertype": "IPv4",
+     "security_group_id": "0e1e865a-9702-4258-9fb5-e66996495f7f",
+     "description": "Created by CCE,please don't modify! Used by worker nodes to access each other and to access the master node.",
+     "remote_ip_prefix": "172.16.240.0/20",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "22412d1d-f041-464a-aff7-3b65b53a078f",
+     "direction": "ingress"
+    },
+    {
+     "ethertype": "IPv4",
+     "security_group_id": "0e1e865a-9702-4258-9fb5-e66996495f7f",
+     "description": "Created by CCE,please don't modify! Kube-apiserver service port, used to manage the lifecycle of K8s resources.",
+     "port_range_max": 5444,
+     "priority": 1,
+     "enabled": true,
+     "protocol": "tcp",
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "f3c18e0e-5123-47c3-8049-98752b29fb6d",
+     "direction": "ingress",
+     "port_range_min": 5444
+    },
+    {
+     "ethertype": "IPv4",
+     "security_group_id": "0e1e865a-9702-4258-9fb5-e66996495f7f",
+     "description": "Created by CCE,please don't modify! Used by the networking add-on on the worker node to access the master node.",
+     "remote_ip_prefix": "172.16.0.0/12",
+     "port_range_max": 9443,
+     "priority": 1,
+     "enabled": true,
+     "protocol": "tcp",
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "d428092a-7213-477c-93f6-ad0c6b47e8be",
+     "direction": "ingress",
+     "port_range_min": 9443
+    },
+    {
+     "ethertype": "IPv4",
+     "security_group_id": "0e1e865a-9702-4258-9fb5-e66996495f7f",
+     "description": "Created by CCE,please don't modify! Used by the storage add-on on the worker node to access the master node.",
+     "remote_ip_prefix": "172.16.0.0/12",
+     "port_range_max": 8445,
+     "priority": 1,
+     "enabled": true,
+     "protocol": "tcp",
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "a07d92cd-170b-430f-be55-6e520b8eab88",
+     "direction": "ingress",
+     "port_range_min": 8445
+    },
+    {
+     "ethertype": "IPv4",
+     "security_group_id": "0e1e865a-9702-4258-9fb5-e66996495f7f",
+     "description": "Created by CCE,please don't modify! Kube-apiserver service port, used to manage the lifecycle of K8s resources.",
+     "remote_ip_prefix": "172.16.0.0/12",
+     "port_range_max": 5444,
+     "priority": 1,
+     "enabled": true,
+     "protocol": "tcp",
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "61e86468-08fd-4c18-ae57-b2e2c55cf4d6",
+     "direction": "ingress",
+     "port_range_min": 5444
+    },
+    {
+     "remote_group_id": "0e1e865a-9702-4258-9fb5-e66996495f7f",
+     "ethertype": "IPv4",
+     "security_group_id": "0e1e865a-9702-4258-9fb5-e66996495f7f",
+     "description": "Created by CCE,please don't modify! Traffic from the source IP addresses defined in the security group must be allowed.",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "585582ac-c9c8-4d86-8fce-6620e51fb574",
+     "direction": "ingress"
+    },
+    {
+     "ethertype": "IPv4",
+     "security_group_id": "0e1e865a-9702-4258-9fb5-e66996495f7f",
+     "description": "Created by CCE,please don't modify! Listening port of kube-apiserver of the master node.",
+     "port_range_max": 5443,
+     "priority": 1,
+     "enabled": true,
+     "protocol": "tcp",
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "435b197f-9205-4650-9ace-ef944a2e6dcb",
+     "direction": "ingress",
+     "port_range_min": 5443
+    },
+    {
+     "ethertype": "IPv4",
+     "security_group_id": "0e1e865a-9702-4258-9fb5-e66996495f7f",
+     "description": "Created by CCE,please don't modify! Default egress security group rule ",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "2adb367e-b94d-4b76-919f-10884f6d1acf",
+     "direction": "egress"
+    }
+   ]
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "11a3b4a2-cf20-44ff-b110-e3b6ca73eb31",
+  "name": "bw-ecs-test",
+  "provider": "vpc",
+  "type": "bandwidths",
+  "properties": {
+   "bandwidthType": "bgp",
+   "shortId": "0c7f042648763000",
+   "billingInfo": "",
+   "size": 5,
+   "chargeMode": "bandwidth",
+   "publicipInfo": [
+    {
+     "ipVersion": "4",
+     "publicipId": "d9c6dbd0-1f1a-4190-81d6-c8bde626e994",
+     "publicipType": "5_bgp",
+     "publicipAddress": "113.44.154.214"
+    }
+   ],
+   "tenantId": "01a047a473d57187b17b938836faf5f0",
+   "adminState": "NORMAL",
+   "type": "PER",
+   "ingressSize": "10"
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "2f0c8f0a-b7c7-4fb4-a343-116860ebcd5a",
+  "name": "default",
+  "provider": "vpc",
+  "type": "securityGroups",
+  "properties": {
+   "description": "Default security group",
+   "security_group_rules": [
+    {
+     "ethertype": "IPv6",
+     "security_group_id": "2f0c8f0a-b7c7-4fb4-a343-116860ebcd5a",
+     "description": "",
+     "priority": 100,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "646db77d-1264-46c9-aee5-cb15b2dc2fc8",
+     "direction": "egress"
+    },
+    {
+     "remote_group_id": "2f0c8f0a-b7c7-4fb4-a343-116860ebcd5a",
+     "ethertype": "IPv6",
+     "security_group_id": "2f0c8f0a-b7c7-4fb4-a343-116860ebcd5a",
+     "description": "",
+     "priority": 100,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "1f879b9c-4be5-435b-bb34-f9cfc25620e3",
+     "direction": "ingress"
+    },
+    {
+     "ethertype": "IPv4",
+     "security_group_id": "2f0c8f0a-b7c7-4fb4-a343-116860ebcd5a",
+     "description": "",
+     "priority": 100,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "ef651414-42e6-4299-a0d8-19d3ca4b0ab0",
+     "direction": "egress"
+    },
+    {
+     "remote_group_id": "2f0c8f0a-b7c7-4fb4-a343-116860ebcd5a",
+     "ethertype": "IPv4",
+     "security_group_id": "2f0c8f0a-b7c7-4fb4-a343-116860ebcd5a",
+     "description": "",
+     "priority": 100,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "1239b416-003c-4272-8013-c82a42add773",
+     "direction": "ingress"
+    }
+   ]
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "3b95e1af-e6f6-4f34-aa19-2da0896ca911",
+  "name": "sg-apig-aishell-e2b",
+  "provider": "vpc",
+  "type": "securityGroups",
+  "properties": {
+   "description": "",
+   "security_group_rules": [
+    {
+     "ethertype": "IPv6",
+     "security_group_id": "3b95e1af-e6f6-4f34-aa19-2da0896ca911",
+     "description": "\u5141\u8bb8\u6240\u6709\u6d41\u91cf\u4ece\u5b89\u5168\u7ec4\u5185\u5b9e\u4f8b\u6d41\u51fa\uff0c\u7528\u4e8e\u8bbf\u95ee\u5916\u90e8\u3002",
+     "remote_ip_prefix": "::/0",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "4343ac10-96aa-44b3-a52a-ab7732192beb",
+     "direction": "egress"
+    },
+    {
+     "ethertype": "IPv4",
+     "security_group_id": "3b95e1af-e6f6-4f34-aa19-2da0896ca911",
+     "description": "\u5141\u8bb8\u6240\u6709\u6d41\u91cf\u4ece\u5b89\u5168\u7ec4\u5185\u5b9e\u4f8b\u6d41\u51fa\uff0c\u7528\u4e8e\u8bbf\u95ee\u5916\u90e8\u3002",
+     "remote_ip_prefix": "0.0.0.0/0",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "5ede6e58-c2b3-42a1-a7c7-c610e47f0c08",
+     "direction": "egress"
+    },
+    {
+     "remote_group_id": "3b95e1af-e6f6-4f34-aa19-2da0896ca911",
+     "ethertype": "IPv6",
+     "security_group_id": "3b95e1af-e6f6-4f34-aa19-2da0896ca911",
+     "description": "\u5141\u8bb8\u5b89\u5168\u7ec4\u5185\u5b9e\u4f8b\u901a\u8fc7\u5185\u7f51\u7f51\u7edc\u76f8\u4e92\u901a\u4fe1\u3002",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "d1bb26a4-2cf0-4223-96f1-2101e3c573d4",
+     "direction": "ingress"
+    },
+    {
+     "remote_group_id": "3b95e1af-e6f6-4f34-aa19-2da0896ca911",
+     "ethertype": "IPv4",
+     "security_group_id": "3b95e1af-e6f6-4f34-aa19-2da0896ca911",
+     "description": "\u5141\u8bb8\u5b89\u5168\u7ec4\u5185\u5b9e\u4f8b\u901a\u8fc7\u5185\u7f51\u7f51\u7edc\u76f8\u4e92\u901a\u4fe1\u3002",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "49ad66f3-3e26-4981-99da-763e4a0f5366",
+     "direction": "ingress"
+    }
+   ]
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "3d8b78be-267c-4489-ab79-8c24c10b145e",
+  "name": "sg-ecs-test",
+  "provider": "vpc",
+  "type": "securityGroups",
+  "properties": {
+   "description": "Security group for test ECS - web ports only",
+   "security_group_rules": [
+    {
+     "ethertype": "IPv4",
+     "security_group_id": "3d8b78be-267c-4489-ab79-8c24c10b145e",
+     "description": "",
+     "remote_ip_prefix": "124.70.231.92/32",
+     "port_range_max": 80,
+     "priority": 1,
+     "enabled": true,
+     "protocol": "tcp",
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "0bcabe64-8bb2-4a71-aadb-546e30c235e8",
+     "direction": "ingress",
+     "port_range_min": 80
+    },
+    {
+     "ethertype": "IPv4",
+     "security_group_id": "3d8b78be-267c-4489-ab79-8c24c10b145e",
+     "description": "",
+     "remote_ip_prefix": "0.0.0.0/0",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "f20b766e-aed2-4e29-95f7-348d3c0c2371",
+     "direction": "egress"
+    },
+    {
+     "ethertype": "IPv4",
+     "security_group_id": "3d8b78be-267c-4489-ab79-8c24c10b145e",
+     "description": "",
+     "remote_ip_prefix": "124.70.231.92/32",
+     "port_range_max": 443,
+     "priority": 1,
+     "enabled": true,
+     "protocol": "tcp",
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "4de429ac-7041-42d4-b714-0a3f346a533b",
+     "direction": "ingress",
+     "port_range_min": 443
+    },
+    {
+     "ethertype": "IPv4",
+     "security_group_id": "3d8b78be-267c-4489-ab79-8c24c10b145e",
+     "description": "",
+     "remote_ip_prefix": "124.70.231.92/32",
+     "port_range_max": 8080,
+     "priority": 1,
+     "enabled": true,
+     "protocol": "tcp",
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "217dcc9f-c654-447c-badb-c04ebd721086",
+     "direction": "ingress",
+     "port_range_min": 8080
+    },
+    {
+     "ethertype": "IPv6",
+     "security_group_id": "3d8b78be-267c-4489-ab79-8c24c10b145e",
+     "description": "",
+     "priority": 100,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "c580b441-b2e6-4b0e-ad9f-8fab10167042",
+     "direction": "egress"
+    },
+    {
+     "ethertype": "IPv4",
+     "security_group_id": "3d8b78be-267c-4489-ab79-8c24c10b145e",
+     "description": "",
+     "priority": 100,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "0fc5584b-bb67-41e4-afc7-383473813c91",
+     "direction": "egress"
+    },
+    {
+     "remote_group_id": "3d8b78be-267c-4489-ab79-8c24c10b145e",
+     "ethertype": "IPv6",
+     "security_group_id": "3d8b78be-267c-4489-ab79-8c24c10b145e",
+     "description": "",
+     "priority": 100,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "2d1bb612-09ea-4cd4-aea0-ccf8c88d1ba1",
+     "direction": "ingress"
+    },
+    {
+     "remote_group_id": "3d8b78be-267c-4489-ab79-8c24c10b145e",
+     "ethertype": "IPv4",
+     "security_group_id": "3d8b78be-267c-4489-ab79-8c24c10b145e",
+     "description": "",
+     "priority": 100,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "d2e03a48-5b5b-4daf-87f9-b8cb6422cc21",
+     "direction": "ingress"
+    }
+   ]
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "48fb8107-e188-4169-b479-cb62cf6fe9fc",
+  "name": "sg-aishell-cce-turbo-pod",
+  "provider": "vpc",
+  "type": "securityGroups",
+  "properties": {
+   "description": "",
+   "security_group_rules": [
+    {
+     "ethertype": "IPv4",
+     "security_group_id": "48fb8107-e188-4169-b479-cb62cf6fe9fc",
+     "description": "subnet-aishell-e2b",
+     "remote_ip_prefix": "172.16.240.0/20",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "1cc2ced1-318b-4c9f-bf2f-f547e6a0ef15",
+     "direction": "ingress"
+    },
+    {
+     "remote_group_id": "f469adf0-16f3-439e-990d-2c5669634ac2",
+     "ethertype": "IPv4",
+     "multiport": "80,8080",
+     "security_group_id": "48fb8107-e188-4169-b479-cb62cf6fe9fc",
+     "description": "apig -- pod",
+     "priority": 1,
+     "enabled": true,
+     "protocol": "tcp",
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "23179ef6-fc54-4eaa-9fa8-e0011aefefd2",
+     "direction": "ingress"
+    },
+    {
+     "ethertype": "IPv6",
+     "security_group_id": "48fb8107-e188-4169-b479-cb62cf6fe9fc",
+     "description": "\u5141\u8bb8\u6240\u6709\u6d41\u91cf\u4ece\u5b89\u5168\u7ec4\u5185\u5b9e\u4f8b\u6d41\u51fa\uff0c\u7528\u4e8e\u8bbf\u95ee\u5916\u90e8\u3002",
+     "remote_ip_prefix": "::/0",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "c98780b3-833a-4190-94d1-1b418b926ef3",
+     "direction": "egress"
+    },
+    {
+     "ethertype": "IPv4",
+     "security_group_id": "48fb8107-e188-4169-b479-cb62cf6fe9fc",
+     "description": "\u5141\u8bb8\u6240\u6709\u6d41\u91cf\u4ece\u5b89\u5168\u7ec4\u5185\u5b9e\u4f8b\u6d41\u51fa\uff0c\u7528\u4e8e\u8bbf\u95ee\u5916\u90e8\u3002",
+     "remote_ip_prefix": "0.0.0.0/0",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "70e5a42a-958b-44ae-bcdc-949c08359766",
+     "direction": "egress"
+    },
+    {
+     "remote_group_id": "48fb8107-e188-4169-b479-cb62cf6fe9fc",
+     "ethertype": "IPv6",
+     "security_group_id": "48fb8107-e188-4169-b479-cb62cf6fe9fc",
+     "description": "\u5141\u8bb8\u5b89\u5168\u7ec4\u5185\u5b9e\u4f8b\u901a\u8fc7\u5185\u7f51\u7f51\u7edc\u76f8\u4e92\u901a\u4fe1\u3002",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "6d67f3f2-5272-4fb1-862d-4adbd5efa6b2",
+     "direction": "ingress"
+    },
+    {
+     "remote_group_id": "48fb8107-e188-4169-b479-cb62cf6fe9fc",
+     "ethertype": "IPv4",
+     "security_group_id": "48fb8107-e188-4169-b479-cb62cf6fe9fc",
+     "description": "\u5141\u8bb8\u5b89\u5168\u7ec4\u5185\u5b9e\u4f8b\u901a\u8fc7\u5185\u7f51\u7f51\u7edc\u76f8\u4e92\u901a\u4fe1\u3002",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "6164504b-6e9a-4188-9780-bde7525d8a37",
+     "direction": "ingress"
+    }
+   ]
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "5855b99f-2e60-42e2-9d28-33eff7e60c3c",
+  "name": "bandwidth-50Mbit",
+  "provider": "vpc",
+  "type": "bandwidths",
+  "properties": {
+   "bandwidthType": "bgp",
+   "shortId": "0c7622c0a6b29000",
+   "billingInfo": "",
+   "size": 50,
+   "chargeMode": "traffic",
+   "publicipInfo": [
+    {
+     "ipVersion": "4",
+     "publicipId": "ef54744b-8fe3-463e-808d-1431f5265a1c",
+     "publicipType": "5_bgp",
+     "publicipAddress": "124.70.109.144"
+    }
+   ],
+   "tenantId": "01a047a473d57187b17b938836faf5f0",
+   "adminState": "NORMAL",
+   "type": "PER",
+   "ingressSize": "50"
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "6aedb539-4ece-42c0-bfc5-597321642bf1",
+  "name": "sg-aishell-cce-turbo-node",
+  "provider": "vpc",
+  "type": "securityGroups",
+  "properties": {
+   "description": "",
+   "security_group_rules": [
+    {
+     "ethertype": "IPv4",
+     "security_group_id": "6aedb539-4ece-42c0-bfc5-597321642bf1",
+     "description": "",
+     "remote_ip_prefix": "172.16.240.0/20",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "49d6328a-4c22-48e5-abf6-4c64cb687ee8",
+     "direction": "ingress"
+    },
+    {
+     "remote_group_id": "0e1e865a-9702-4258-9fb5-e66996495f7f",
+     "ethertype": "IPv4",
+     "security_group_id": "6aedb539-4ece-42c0-bfc5-597321642bf1",
+     "description": "",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "21585da7-94a7-4c9c-8ac6-10478006da58",
+     "direction": "ingress"
+    },
+    {
+     "ethertype": "IPv6",
+     "security_group_id": "6aedb539-4ece-42c0-bfc5-597321642bf1",
+     "description": "\u5141\u8bb8\u6240\u6709\u6d41\u91cf\u4ece\u5b89\u5168\u7ec4\u5185\u5b9e\u4f8b\u6d41\u51fa\uff0c\u7528\u4e8e\u8bbf\u95ee\u5916\u90e8\u3002",
+     "remote_ip_prefix": "::/0",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "1897d77c-2795-4f0c-881a-770367945ee8",
+     "direction": "egress"
+    },
+    {
+     "ethertype": "IPv4",
+     "security_group_id": "6aedb539-4ece-42c0-bfc5-597321642bf1",
+     "description": "\u5141\u8bb8\u6240\u6709\u6d41\u91cf\u4ece\u5b89\u5168\u7ec4\u5185\u5b9e\u4f8b\u6d41\u51fa\uff0c\u7528\u4e8e\u8bbf\u95ee\u5916\u90e8\u3002",
+     "remote_ip_prefix": "0.0.0.0/0",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "94ebc893-b0e2-4adc-a304-ef6cf8d1e2b1",
+     "direction": "egress"
+    },
+    {
+     "remote_group_id": "6aedb539-4ece-42c0-bfc5-597321642bf1",
+     "ethertype": "IPv6",
+     "security_group_id": "6aedb539-4ece-42c0-bfc5-597321642bf1",
+     "description": "\u5141\u8bb8\u5b89\u5168\u7ec4\u5185\u5b9e\u4f8b\u901a\u8fc7\u5185\u7f51\u7f51\u7edc\u76f8\u4e92\u901a\u4fe1\u3002",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "aa7aedaa-02a5-40c9-bd93-2d73c1c10c30",
+     "direction": "ingress"
+    },
+    {
+     "remote_group_id": "6aedb539-4ece-42c0-bfc5-597321642bf1",
+     "ethertype": "IPv4",
+     "security_group_id": "6aedb539-4ece-42c0-bfc5-597321642bf1",
+     "description": "\u5141\u8bb8\u5b89\u5168\u7ec4\u5185\u5b9e\u4f8b\u901a\u8fc7\u5185\u7f51\u7f51\u7edc\u76f8\u4e92\u901a\u4fe1\u3002",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "6e8b16f4-bbcc-44bf-84e8-6ffbf89d9e0b",
+     "direction": "ingress"
+    }
+   ]
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "73e76381-c33b-46bc-975d-755e4f4f1190",
+  "name": "vpc-aishell",
+  "provider": "vpc",
+  "type": "vpcs",
+  "properties": {
+   "default_routetable_id": "55cdc4c2-e908-4d47-ba2d-2fc6398aedd6",
+   "routes": [
+    {
+     "destination": "0.0.0.0/0"
+    }
+   ],
+   "admin_state_up": true,
+   "description": "",
+   "cidr": "172.16.0.0/12",
+   "gateway_ip": "127.156.135.12",
+   "sys_tags": [
+    "_sys_enterprise_project_id=0"
+   ],
+   "enable_snat": false,
+   "status": "ACTIVE"
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "d9c6dbd0-1f1a-4190-81d6-c8bde626e994",
+  "name": "113.44.154.214",
+  "provider": "vpc",
+  "type": "publicips",
+  "properties": {
+   "publicipPoolName": "5_bgp",
+   "associateInstanceType": "PORT",
+   "ipVersion": 4,
+   "publicIpAddress": "113.44.154.214",
+   "vnic": {
+    "vni": "1442414",
+    "instanceId": "",
+    "deviceOwner": "compute:cn-north-4a",
+    "vpcId": "73e76381-c33b-46bc-975d-755e4f4f1190",
+    "portProfile": "",
+    "instanceType": "",
+    "portId": "987703d0-222a-4ca4-bad3-13e65c1967d6",
+    "deviceId": "7aaaa669-ad9b-46cb-a914-ecff7f0d51c9",
+    "privateIpAddress": "172.16.224.24",
+    "mac": "fa:16:3e:a0:70:a8",
+    "vtep": "26.173.82.225"
+   },
+   "bandwidth": {
+    "billingInfo": "",
+    "size": 5,
+    "chargeMode": "bandwidth",
+    "name": "bw-ecs-test",
+    "id": "11a3b4a2-cf20-44ff-b110-e3b6ca73eb31",
+    "shareType": "PER"
+   },
+   "associateInstanceId": "987703d0-222a-4ca4-bad3-13e65c1967d6",
+   "type": "EIP",
+   "networkType": "5_bgp",
+   "createAt": "2026-10-21T02:45:32Z",
+   "status": "ACTIVE"
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "e43e393a-bdcb-4a66-a0a2-9850661444a2",
+  "name": "113.44.205.243",
+  "provider": "vpc",
+  "type": "publicips",
+  "properties": {
+   "publicipPoolName": "5_bgp",
+   "associateInstanceType": "ELB",
+   "ipVersion": 4,
+   "publicIpAddress": "113.44.205.243",
+   "bandwidth": {
+    "billingInfo": "",
+    "size": 300,
+    "chargeMode": "traffic",
+    "name": "bandwidth-aishell-300",
+    "id": "f190c3f5-2ffb-4c92-86e5-37bb6b9a7bf2",
+    "shareType": "PER"
+   },
+   "associateInstanceId": "d88ace1a-cff0-4bfc-a0de-01931202d1f6",
+   "type": "EIP",
+   "networkType": "5_bgp",
+   "createAt": "2026-10-13T04:29:59Z",
+   "status": "ACTIVE"
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "ebad399d-2688-4c0e-9135-2bae6578f6de",
+  "name": "sg-aishell-postgresql",
+  "provider": "vpc",
+  "type": "securityGroups",
+  "properties": {
+   "description": "",
+   "security_group_rules": [
+    {
+     "remote_group_id": "48fb8107-e188-4169-b479-cb62cf6fe9fc",
+     "ethertype": "IPv4",
+     "security_group_id": "ebad399d-2688-4c0e-9135-2bae6578f6de",
+     "description": "",
+     "port_range_max": 5432,
+     "priority": 1,
+     "enabled": true,
+     "protocol": "tcp",
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "bbae2ae7-b505-4705-b9d0-98eb66615c6f",
+     "direction": "ingress",
+     "port_range_min": 5432
+    },
+    {
+     "ethertype": "IPv6",
+     "security_group_id": "ebad399d-2688-4c0e-9135-2bae6578f6de",
+     "description": "\u5141\u8bb8\u6240\u6709\u6d41\u91cf\u4ece\u5b89\u5168\u7ec4\u5185\u5b9e\u4f8b\u6d41\u51fa\uff0c\u7528\u4e8e\u8bbf\u95ee\u5916\u90e8\u3002",
+     "remote_ip_prefix": "::/0",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "fb3a67bd-f9f4-4a46-8ba7-935e99ae6c6e",
+     "direction": "egress"
+    },
+    {
+     "ethertype": "IPv4",
+     "security_group_id": "ebad399d-2688-4c0e-9135-2bae6578f6de",
+     "description": "\u5141\u8bb8\u6240\u6709\u6d41\u91cf\u4ece\u5b89\u5168\u7ec4\u5185\u5b9e\u4f8b\u6d41\u51fa\uff0c\u7528\u4e8e\u8bbf\u95ee\u5916\u90e8\u3002",
+     "remote_ip_prefix": "0.0.0.0/0",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "2689fb8a-e5e7-4f67-9e35-d9de469474d4",
+     "direction": "egress"
+    },
+    {
+     "remote_group_id": "ebad399d-2688-4c0e-9135-2bae6578f6de",
+     "ethertype": "IPv6",
+     "security_group_id": "ebad399d-2688-4c0e-9135-2bae6578f6de",
+     "description": "\u5141\u8bb8\u5b89\u5168\u7ec4\u5185\u5b9e\u4f8b\u901a\u8fc7\u5185\u7f51\u7f51\u7edc\u76f8\u4e92\u901a\u4fe1\u3002",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "a01393b6-7901-4b96-b644-a9c07bd9eb18",
+     "direction": "ingress"
+    },
+    {
+     "remote_group_id": "ebad399d-2688-4c0e-9135-2bae6578f6de",
+     "ethertype": "IPv4",
+     "security_group_id": "ebad399d-2688-4c0e-9135-2bae6578f6de",
+     "description": "\u5141\u8bb8\u5b89\u5168\u7ec4\u5185\u5b9e\u4f8b\u901a\u8fc7\u5185\u7f51\u7f51\u7edc\u76f8\u4e92\u901a\u4fe1\u3002",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "ce019b92-c46c-4021-8225-5f9b4f37cd47",
+     "direction": "ingress"
+    }
+   ]
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "ef54744b-8fe3-463e-808d-1431f5265a1c",
+  "name": "124.70.109.144",
+  "provider": "vpc",
+  "type": "publicips",
+  "properties": {
+   "publicipPoolName": "5_bgp",
+   "associateInstanceType": "NATGW",
+   "ipVersion": 4,
+   "publicIpAddress": "124.70.109.144",
+   "vnic": {
+    "vni": "1539272",
+    "instanceId": "",
+    "deviceOwner": "network:nat_gateway",
+    "vpcId": "73e76381-c33b-46bc-975d-755e4f4f1190",
+    "portProfile": "",
+    "instanceType": "",
+    "portId": "4fb079cc-b8c5-495c-b001-b24db1a99289",
+    "deviceId": "38272676-5712-42e0-aec3-3de0c376a520",
+    "privateIpAddress": "172.16.249.82",
+    "mac": "fa:16:3e:a0:89:e2",
+    "vtep": "10.94.46.2"
+   },
+   "bandwidth": {
+    "billingInfo": "",
+    "size": 50,
+    "chargeMode": "traffic",
+    "name": "bandwidth-50Mbit",
+    "id": "5855b99f-2e60-42e2-9d28-33eff7e60c3c",
+    "shareType": "PER"
+   },
+   "associateInstanceId": "38272676-5712-42e0-aec3-3de0c376a520",
+   "type": "EIP",
+   "networkType": "5_bgp",
+   "createAt": "2026-10-14T05:12:54Z",
+   "status": "ACTIVE"
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "f190c3f5-2ffb-4c92-86e5-37bb6b9a7bf2",
+  "name": "bandwidth-aishell-300",
+  "provider": "vpc",
+  "type": "bandwidths",
+  "properties": {
+   "bandwidthType": "bgp",
+   "shortId": "0c74cf570f06b000",
+   "billingInfo": "",
+   "size": 300,
+   "chargeMode": "traffic",
+   "publicipInfo": [
+    {
+     "ipVersion": "4",
+     "publicipId": "e43e393a-bdcb-4a66-a0a2-9850661444a2",
+     "publicipType": "5_bgp",
+     "publicipAddress": "113.44.205.243"
+    }
+   ],
+   "tenantId": "01a047a473d57187b17b938836faf5f0",
+   "adminState": "NORMAL",
+   "type": "PER",
+   "ingressSize": "300"
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "f469adf0-16f3-439e-990d-2c5669634ac2",
+  "name": "sg-apig-aishell-api",
+  "provider": "vpc",
+  "type": "securityGroups",
+  "properties": {
+   "description": "",
+   "security_group_rules": [
+    {
+     "ethertype": "IPv6",
+     "security_group_id": "f469adf0-16f3-439e-990d-2c5669634ac2",
+     "description": "\u5141\u8bb8\u6240\u6709\u6d41\u91cf\u4ece\u5b89\u5168\u7ec4\u5185\u5b9e\u4f8b\u6d41\u51fa\uff0c\u7528\u4e8e\u8bbf\u95ee\u5916\u90e8\u3002",
+     "remote_ip_prefix": "::/0",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "fadd141a-09d7-4462-ac1b-bd304db76d08",
+     "direction": "egress"
+    },
+    {
+     "ethertype": "IPv4",
+     "security_group_id": "f469adf0-16f3-439e-990d-2c5669634ac2",
+     "description": "\u5141\u8bb8\u6240\u6709\u6d41\u91cf\u4ece\u5b89\u5168\u7ec4\u5185\u5b9e\u4f8b\u6d41\u51fa\uff0c\u7528\u4e8e\u8bbf\u95ee\u5916\u90e8\u3002",
+     "remote_ip_prefix": "0.0.0.0/0",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "306dbe47-cd46-4d79-b521-584ffce7dac5",
+     "direction": "egress"
+    },
+    {
+     "remote_group_id": "f469adf0-16f3-439e-990d-2c5669634ac2",
+     "ethertype": "IPv6",
+     "security_group_id": "f469adf0-16f3-439e-990d-2c5669634ac2",
+     "description": "\u5141\u8bb8\u5b89\u5168\u7ec4\u5185\u5b9e\u4f8b\u901a\u8fc7\u5185\u7f51\u7f51\u7edc\u76f8\u4e92\u901a\u4fe1\u3002",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "8219da64-2b66-4318-a661-538af18abed4",
+     "direction": "ingress"
+    },
+    {
+     "remote_group_id": "f469adf0-16f3-439e-990d-2c5669634ac2",
+     "ethertype": "IPv4",
+     "security_group_id": "f469adf0-16f3-439e-990d-2c5669634ac2",
+     "description": "\u5141\u8bb8\u5b89\u5168\u7ec4\u5185\u5b9e\u4f8b\u901a\u8fc7\u5185\u7f51\u7f51\u7edc\u76f8\u4e92\u901a\u4fe1\u3002",
+     "priority": 1,
+     "enabled": true,
+     "project_id": "01a047a473d57187b17b938836faf5f0",
+     "action": "allow",
+     "id": "0bc2b599-bed9-4c9d-ad83-7cd8ba931f3a",
+     "direction": "ingress"
+    }
+   ]
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "1e3a670e-6a57-4142-b0e6-896bb904b63c",
+  "name": "aishell-turbo-ac9s.16xlarge.4-64c256g",
+  "provider": "ecs",
+  "type": "cloudservers",
+  "properties": {
+   "accessIpv4": "",
+   "hostName": "aishell-turbo-ac9s.16xlarge.4-64c256g",
+   "addresses": [
+    {
+     "OsExtIpsType": "fixed",
+     "OsExtIpsPortId": "ccdad1c7-e7f5-469a-982d-8431a1e7e879",
+     "addr": "172.16.249.20",
+     "version": 4,
+     "OsExtIpsMacAddr": "fa:16:3e:a0:89:a4",
+     "primary": true
+    },
+    {
+     "OsExtIpsType": "fixed",
+     "OsExtIpsPortId": "2ccc65e8-613e-40ef-b4e7-627b6de97114",
+     "addr": "172.16.253.71",
+     "version": 4,
+     "OsExtIpsMacAddr": "fa:16:3e:a0:8d:d7",
+     "primary": false
+    }
+   ],
+   "accessIpv6": "",
+   "metadata": {
+    "chargingMode": "0",
+    "lockScene": "OTHER_SVC_LOCK=toperiod",
+    "meteringImageType": "gold",
+    "imageName": "CCE_images_HCE20-Node-26.7.0-common-amd64-9290e4e5-20260723173713",
+    "meteringImageId": "59f36fb2-541a-44b4-85b4-65c314cfc81a",
+    "meteringResourcesPerCode": "ac9s.16xlarge.4.linux",
+    "vpcId": "73e76381-c33b-46bc-975d-755e4f4f1190",
+    "osBit": "64",
+    "osType": "Linux",
+    "lockSource": "CCE",
+    "lockCheckEndpoint": "https://cce-internal.cn-north-4.myhuaweicloud.com/api/v3/lockcheckpoint/e1abefa4-c6d3-11f1-968b-0255ac100244",
+    "lockSourceId": "e1abefa4-c6d3-11f1-968b-0255ac100244"
+   },
+   "OsExtStsVmState": "active",
+   "configDrive": "",
+   "OsExtStsPowerState": 1,
+   "keyName": "KeyPair-aishell-turbo-ac9s_16xlarge_4-64c256g",
+   "hostId": "75a82fc23000cfafc3a0242643b00418904c8da4cf7c2d6fe50c8f94",
+   "securityGroup": [
+    {
+     "name": "sg-aishell-cce-turbo-node",
+     "id": "6aedb539-4ece-42c0-bfc5-597321642bf1"
+    }
+   ],
+   "ExtVolumesAttached": [
+    {
+     "bootIndex": "0",
+     "id": "6ee65b74-9a57-4648-ab32-2782fa96bd51",
+     "deleteOnTermination": "true",
+     "device": "/dev/vda"
+    }
+   ],
+   "userId": "01a133e765727344a888af9729ca3ebe",
+   "flavor": {
+    "disk": "0",
+    "name": "ac9s.16xlarge.4",
+    "id": "ac9s.16xlarge.4",
+    "vcpus": "64",
+    "ram": "262144"
+   },
+   "osextsrvattr": {
+    "hostName": "aishell-turbo-ac9s.16xlarge.4-64c256g",
+    "kernelId": "",
+    "ramdiskId": "",
+    "reservationId": "r-g8geot7h",
+    "instanceName": "instance-06dd6cd4",
+    "host": "75a82fc23000cfafc3a0242643b00418904c8da4cf7c2d6fe50c8f94",
+    "rootDeviceName": "/dev/vda",
+    "hypervisorHostName": "75a82fc23000cfafc3a0242643b00418904c8da4cf7c2d6fe50c8f94",
+    "launchIndex": 0
+   },
+   "OsDcfDiskConfig": "MANUAL",
+   "hostStatus": "UP",
+   "OsSrvUsgLaunchedAt": "2026-10-13T07:34:52.443908",
+   "OsExtAz": "cn-north-4a",
+   "progress": 0,
+   "locked": false,
+   "status": "ACTIVE",
+   "schedulerHints": {}
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "7aaaa669-ad9b-46cb-a914-ecff7f0d51c9",
+  "name": "ecs-test",
+  "provider": "ecs",
+  "type": "cloudservers",
+  "properties": {
+   "accessIpv4": "",
+   "hostName": "ecs-test",
+   "addresses": [
+    {
+     "OsExtIpsType": "fixed",
+     "OsExtIpsPortId": "987703d0-222a-4ca4-bad3-13e65c1967d6",
+     "addr": "172.16.224.24",
+     "version": 4,
+     "OsExtIpsMacAddr": "fa:16:3e:a0:70:a8",
+     "primary": true
+    },
+    {
+     "OsExtIpsType": "floating",
+     "OsExtIpsPortId": "987703d0-222a-4ca4-bad3-13e65c1967d6",
+     "addr": "113.44.154.214",
+     "version": 4,
+     "OsExtIpsMacAddr": "fa:16:3e:a0:70:a8",
+     "primary": true
+    }
+   ],
+   "accessIpv6": "",
+   "metadata": {
+    "chargingMode": "0",
+    "meteringImageType": "gold",
+    "imageName": "Ubuntu 22.04 server 64bit",
+    "meteringImageId": "89ac6e18-d938-4b0d-b038-bcdb03a1b87f",
+    "meteringResourcesPerCode": "c7.xlarge.2.linux",
+    "vpcId": "73e76381-c33b-46bc-975d-755e4f4f1190",
+    "osBit": "64",
+    "osType": "Linux"
+   },
+   "OsExtStsVmState": "active",
+   "configDrive": "",
+   "OsExtStsPowerState": 1,
+   "hostId": "bd1283cef4d9d71a1fee97dcf92c98a4042560e3b198f86ab74b0365",
+   "securityGroup": [
+    {
+     "name": "sg-ecs-test",
+     "id": "3d8b78be-267c-4489-ab79-8c24c10b145e"
+    }
+   ],
+   "ExtVolumesAttached": [
+    {
+     "bootIndex": "0",
+     "id": "29c689df-6c22-4078-8ed2-58e2a6a9f40e",
+     "deleteOnTermination": "true",
+     "device": "/dev/sda"
+    }
+   ],
+   "userId": "01a047e5f5e87d2bbd58dc7ea2bedd46",
+   "flavor": {
+    "disk": "0",
+    "name": "c7.xlarge.2",
+    "id": "c7.xlarge.2",
+    "vcpus": "4",
+    "ram": "8192"
+   },
+   "osextsrvattr": {
+    "hostName": "ecs-test",
+    "kernelId": "",
+    "ramdiskId": "",
+    "reservationId": "r-z5q0posj",
+    "instanceName": "instance-06e74736",
+    "host": "bd1283cef4d9d71a1fee97dcf92c98a4042560e3b198f86ab74b0365",
+    "rootDeviceName": "/dev/sda",
+    "hypervisorHostName": "bd1283cef4d9d71a1fee97dcf92c98a4042560e3b198f86ab74b0365",
+    "launchIndex": 0
+   },
+   "OsDcfDiskConfig": "MANUAL",
+   "hostStatus": "UP",
+   "OsSrvUsgLaunchedAt": "2026-10-21T02:45:47.000000",
+   "OsExtAz": "cn-north-4a",
+   "progress": 0,
+   "locked": false,
+   "status": "ACTIVE",
+   "schedulerHints": {}
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "fca8df6c-504a-40c5-acf7-adf45c17807a",
+  "name": "aishell-turbo-ac9s.16xlarge.2-64c128g",
+  "provider": "ecs",
+  "type": "cloudservers",
+  "properties": {
+   "accessIpv4": "",
+   "hostName": "aishell-turbo-ac9s.16xlarge.2-64c128g",
+   "addresses": [
+    {
+     "OsExtIpsType": "fixed",
+     "OsExtIpsPortId": "9010e74c-43c8-4ba0-a398-96baa210ea86",
+     "addr": "172.16.254.153",
+     "version": 4,
+     "OsExtIpsMacAddr": "fa:16:3e:a0:8e:29",
+     "primary": true
+    },
+    {
+     "OsExtIpsType": "fixed",
+     "OsExtIpsPortId": "4ed97137-f29f-43fe-8caf-c3f7d2bbedad",
+     "addr": "172.16.240.140",
+     "version": 4,
+     "OsExtIpsMacAddr": "fa:16:3e:a0:80:1c",
+     "primary": false
+    }
+   ],
+   "accessIpv6": "",
+   "metadata": {
+    "chargingMode": "0",
+    "lockScene": "OTHER_SVC_LOCK=toperiod",
+    "meteringImageType": "gold",
+    "imageName": "CCE_images_HCE20-Node-26.7.0-common-amd64-9290e4e5-20260723173713",
+    "meteringImageId": "59f36fb2-541a-44b4-85b4-65c314cfc81a",
+    "meteringResourcesPerCode": "ac9s.16xlarge.2.linux",
+    "vpcId": "73e76381-c33b-46bc-975d-755e4f4f1190",
+    "osBit": "64",
+    "osType": "Linux",
+    "lockSource": "CCE",
+    "lockCheckEndpoint": "https://cce-internal.cn-north-4.myhuaweicloud.com/api/v3/lockcheckpoint/e1abefa4-c6d3-11f1-968b-0255ac100244",
+    "lockSourceId": "e1abefa4-c6d3-11f1-968b-0255ac100244"
+   },
+   "OsExtStsVmState": "active",
+   "configDrive": "",
+   "OsExtStsPowerState": 1,
+   "keyName": "KeyPair-aishell-turbo-ac9s_16xlarge_4-64c256g",
+   "hostId": "0bd7c442f873aa5f96d71c4c5b04c9cb4b0ef8514dc5f426f2dc5795",
+   "securityGroup": [
+    {
+     "name": "sg-aishell-cce-turbo-node",
+     "id": "6aedb539-4ece-42c0-bfc5-597321642bf1"
+    }
+   ],
+   "ExtVolumesAttached": [
+    {
+     "bootIndex": "0",
+     "id": "0e605b26-e19b-4a25-abd7-722305b75c54",
+     "deleteOnTermination": "true",
+     "device": "/dev/vda"
+    }
+   ],
+   "userId": "01a133e765727344a888af9729ca3ebe",
+   "flavor": {
+    "disk": "0",
+    "name": "ac9s.16xlarge.2",
+    "id": "ac9s.16xlarge.2",
+    "vcpus": "64",
+    "ram": "131072"
+   },
+   "osextsrvattr": {
+    "hostName": "aishell-turbo-ac9s.16xlarge.2-64c128g",
+    "kernelId": "",
+    "ramdiskId": "",
+    "reservationId": "r-mgs5ylmk",
+    "instanceName": "instance-06ddae25",
+    "host": "bd7c442f873aa5f96d71c4c5b04c9cb4b0ef8514dc5f426f2dc5795",
+    "rootDeviceName": "/dev/vda",
+    "hypervisorHostName": "bd7c442f873aa5f96d71c4c5b04c9cb4b0ef8514dc5f426f2dc5795",
+    "launchIndex": 0
+   },
+   "OsDcfDiskConfig": "MANUAL",
+   "hostStatus": "UP",
+   "OsSrvUsgLaunchedAt": "2026-10-13T11:38:48.334729",
+   "OsExtAz": "cn-north-4a",
+   "progress": 0,
+   "locked": false,
+   "status": "ACTIVE",
+   "schedulerHints": {}
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "8e7b9cb138cc480889a651f7be9c463ain03",
+  "name": "rds-postgresql",
+  "provider": "rds",
+  "type": "instances",
+  "properties": {
+   "volumeType": "ULTRAHIGH",
+   "scheduleTime": "19:00:00",
+   "flavorCode": "rds.pg.x1.large.4.ha",
+   "opsWindow": "18:00-22:00",
+   "haMode": "Ha",
+   "enableSsl": "1",
+   "securityGroupId": "[\"ebad399d-2688-4c0e-9135-2bae6578f6de\"]",
+   "mem": "8",
+   "dataVip": "172.16.240.105",
+   "vpcId": "[\"73e76381-c33b-46bc-975d-755e4f4f1190\"]",
+   "networkId": "[\"0e2714fd-3ec5-45ac-b89b-ba2235999af1\"]",
+   "azCode": "cn-north-4a,cn-north-4b",
+   "azMode": "unknown",
+   "auditLogEnabled": "0",
+   "engineVersion": "18.6.260901",
+   "backupSchedule": "* * 1,2,3,4,5,6,7",
+   "nodeNum": "2",
+   "errorLogEnabled": "1",
+   "payMode": "0",
+   "slowLogEnabled": "1",
+   "cpu": "2",
+   "userId": "01a047e5f5f972b5a549ed4c6905f99f",
+   "instanceStatus": "normal",
+   "backupEnabled": "1",
+   "port": "5432",
+   "dataVolumeSizeInGBs": "200",
+   "engineName": "postgresql",
+   "backupTime": "7"
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "d88ace1a-cff0-4bfc-a0de-01931202d1f6",
+  "name": "elb-aishell-e2b",
+  "provider": "elb",
+  "type": "loadbalancers",
+  "properties": {
+   "tenant_id": "01a047a473d57187b17b938836faf5f0",
+   "vpc_id": "73e76381-c33b-46bc-975d-755e4f4f1190",
+   "eips": [
+    {
+     "eip_address": "113.44.205.243",
+     "ip_version": 4,
+     "eip_id": "e43e393a-bdcb-4a66-a0a2-9850661444a2"
+    }
+   ],
+   "elb_virsubnet_type": "ipv4",
+   "description": "",
+   "pools": [
+    {
+     "id": "9536802c-09b5-4d3e-9a7d-4f17d8d43b86"
+    }
+   ],
+   "global_eips": [],
+   "elb_virsubnet_ids": [
+    "0e2714fd-3ec5-45ac-b89b-ba2235999af1"
+   ],
+   "provider": "vlb",
+   "operating_status": "ONLINE",
+   "admin_state_up": true,
+   "availability_zone_list": [
+    "cn-north-4a",
+    "cn-north-4c"
+   ],
+   "ip_target_enable": false,
+   "waf_failure_action": "forward",
+   "vip_port_id": "f19365c5-4f0f-4776-981a-8f3dd55ec40a",
+   "publicips": [
+    {
+     "publicip_id": "e43e393a-bdcb-4a66-a0a2-9850661444a2",
+     "ip_version": 4,
+     "publicip_address": "113.44.205.243"
+    }
+   ],
+   "public_border_group": "center",
+   "listeners": [
+    {
+     "id": "fdc73ad0-da11-4b8e-941e-de7657d96015"
+    }
+   ],
+   "provisioning_status": "ACTIVE",
+   "guaranteed": true,
+   "l7_flavor_id": "66da67e5-e36b-4c9a-8c06-197ae9e92988",
+   "charge_mode": "flavor",
+   "vip_subnet_cidr_id": "d88975a2-3a70-44c1-b68a-f40adb5c2d7f",
+   "vip_address": "172.16.251.129",
+   "l4_flavor_id": "ec6df27e-8ae9-45e3-828f-a6de45e3e109",
+   "deletion_protection_enable": false
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "fdc73ad0-da11-4b8e-941e-de7657d96015",
+  "name": "k8s_HTTPS_443",
+  "provider": "elb",
+  "type": "listeners",
+  "properties": {
+   "tenant_id": "01a047a473d57187b17b938836faf5f0",
+   "protection_status": "consoleProtection",
+   "default_tls_container_ref": "4afb38cbe42d4b8a8de0f9723fd7a1cd",
+   "proxy_protocol_enable": false,
+   "protocol_port": 443,
+   "description": "{\"cluster_id\":\"e1abefa4-c6d3-11f1-968b-0255ac100244\",\"service_id\":\"056fb749-121d-4dbf-b791-374ed7ef8d4d\",\"attention\":\"Attention! It is auto-generated by CCE service, do not modify!\"}",
+   "sni_container_refs": [],
+   "enhance_l7policy_enable": false,
+   "enable_member_retry": true,
+   "connection_limit": -1,
+   "tags": [],
+   "protocol": "HTTPS",
+   "transparent_client_ip_enable": true,
+   "admin_state_up": true,
+   "insert_headers": {
+    "X-Forwarded-ELB-IP": false,
+    "X-Forwarded-Host": true
+   },
+   "loadbalancers": [
+    {
+     "id": "d88ace1a-cff0-4bfc-a0de-01931202d1f6"
+    }
+   ],
+   "http2_enable": false,
+   "tls_ciphers_policy": "tls-1-2",
+   "client_timeout": 60
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "38272676-5712-42e0-aec3-3de0c376a520",
+  "name": "nat-aishell-cce-turbo",
+  "provider": "nat",
+  "type": "natGateways",
+  "properties": {
+   "spec": "2",
+   "status": "ACTIVE"
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "0e605b26-e19b-4a25-abd7-722305b75c54",
+  "name": "aishell-turbo-ac9s.16xlarge.2-64c128g-volume-0000",
+  "provider": "evs",
+  "type": "volumes",
+  "properties": {
+   "shareable": false,
+   "volumeType": "GPSSD",
+   "metadata": {
+    "readonly": "False",
+    "attachedMode": "rw"
+   },
+   "attachments": [
+    {
+     "attachedAt": "2026-10-13T11:38:32.499182",
+     "volumeId": "0e605b26-e19b-4a25-abd7-722305b75c54",
+     "id": "0e605b26-e19b-4a25-abd7-722305b75c54",
+     "attachmentId": "d829cab0-9833-4c68-b944-61a9f6dbecfa",
+     "serverId": "fca8df6c-504a-40c5-acf7-adf45c17807a",
+     "device": "/dev/vda"
+    }
+   ],
+   "replicationStatus": "disabled",
+   "availabilityZone": "cn-north-4a",
+   "bootable": "true",
+   "userId": "01a047a471ea70118f50b6d87827b4e3",
+   "volTenantAttrTenantId": "01a047a473d57187b17b938836faf5f0",
+   "size": 100,
+   "encrypted": false,
+   "volumeImageMetadata": {
+    "virtualEnvType": "FusionCompute",
+    "isregistered": "false",
+    "imageSourceType": "uds",
+    "minDisk": "20",
+    "platform": "Huawei Cloud EulerOS",
+    "osVersion": "Huawei Cloud EulerOS 2.0 64bit",
+    "minRam": "0",
+    "name": "CCE_images_HCE20-Node-26.7.0-common-amd64-9290e4e5-20260723173713",
+    "checksum": "99914b932bd37a50b983c5e7c90ae93b",
+    "osBit": "64",
+    "osType": "Linux",
+    "containerFormat": "bare",
+    "id": "59f36fb2-541a-44b4-85b4-65c314cfc81a",
+    "imageSize": "1028145152",
+    "supportKvm": "true",
+    "diskFormat": "zvhd2",
+    "imageType": "gold"
+   },
+   "volHostAttrHost": "cinder-kvm001@GPSSD#8205",
+   "multiattach": false,
+   "status": "in-use"
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "29c689df-6c22-4078-8ed2-58e2a6a9f40e",
+  "name": "ecs-test-volume-0000",
+  "provider": "evs",
+  "type": "volumes",
+  "properties": {
+   "shareable": false,
+   "volumeType": "GPSSD",
+   "metadata": {
+    "readonly": "False",
+    "attachedMode": "rw"
+   },
+   "attachments": [
+    {
+     "attachedAt": "2026-10-21T02:45:45.278932",
+     "volumeId": "29c689df-6c22-4078-8ed2-58e2a6a9f40e",
+     "id": "29c689df-6c22-4078-8ed2-58e2a6a9f40e",
+     "attachmentId": "e1889f79-3417-4a18-a6cc-dd722bf55492",
+     "serverId": "7aaaa669-ad9b-46cb-a914-ecff7f0d51c9",
+     "device": "/dev/sda"
+    }
+   ],
+   "replicationStatus": "disabled",
+   "availabilityZone": "cn-north-4a",
+   "bootable": "true",
+   "userId": "01a047a471ea70118f50b6d87827b4e3",
+   "volTenantAttrTenantId": "01a047a473d57187b17b938836faf5f0",
+   "size": 40,
+   "encrypted": false,
+   "volumeImageMetadata": {
+    "virtualEnvType": "FusionCompute",
+    "isregistered": "true",
+    "imageSourceType": "uds",
+    "minDisk": "10",
+    "platform": "Ubuntu",
+    "osVersion": "Ubuntu 22.04 server 64bit",
+    "minRam": "0",
+    "name": "Ubuntu 22.04 server 64bit",
+    "checksum": "99914b932bd37a50b983c5e7c90ae93b",
+    "osBit": "64",
+    "osType": "Linux",
+    "containerFormat": "bare",
+    "id": "89ac6e18-d938-4b0d-b038-bcdb03a1b87f",
+    "imageSize": "3026849792",
+    "supportKvm": "true",
+    "diskFormat": "zvhd2",
+    "imageType": "gold"
+   },
+   "volHostAttrHost": "cinder-kvm001@GPSSD#8219",
+   "multiattach": false,
+   "status": "in-use"
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "6ee65b74-9a57-4648-ab32-2782fa96bd51",
+  "name": "aishell-turbo-ac9s.16xlarge.4-64c256g-volume-0000",
+  "provider": "evs",
+  "type": "volumes",
+  "properties": {
+   "shareable": false,
+   "volumeType": "GPSSD",
+   "metadata": {
+    "readonly": "False",
+    "attachedMode": "rw"
+   },
+   "attachments": [
+    {
+     "attachedAt": "2026-10-13T07:34:40.828363",
+     "volumeId": "6ee65b74-9a57-4648-ab32-2782fa96bd51",
+     "id": "6ee65b74-9a57-4648-ab32-2782fa96bd51",
+     "attachmentId": "c3f5289d-cb27-4194-8f08-dcd099f2464f",
+     "serverId": "1e3a670e-6a57-4142-b0e6-896bb904b63c",
+     "device": "/dev/vda"
+    }
+   ],
+   "replicationStatus": "disabled",
+   "availabilityZone": "cn-north-4a",
+   "bootable": "true",
+   "userId": "01a047a471ea70118f50b6d87827b4e3",
+   "volTenantAttrTenantId": "01a047a473d57187b17b938836faf5f0",
+   "size": 100,
+   "encrypted": false,
+   "volumeImageMetadata": {
+    "virtualEnvType": "FusionCompute",
+    "isregistered": "false",
+    "imageSourceType": "uds",
+    "minDisk": "20",
+    "platform": "Huawei Cloud EulerOS",
+    "osVersion": "Huawei Cloud EulerOS 2.0 64bit",
+    "minRam": "0",
+    "name": "CCE_images_HCE20-Node-26.7.0-common-amd64-9290e4e5-20260723173713",
+    "checksum": "99914b932bd37a50b983c5e7c90ae93b",
+    "osBit": "64",
+    "osType": "Linux",
+    "containerFormat": "bare",
+    "id": "59f36fb2-541a-44b4-85b4-65c314cfc81a",
+    "imageSize": "1028145152",
+    "supportKvm": "true",
+    "diskFormat": "zvhd2",
+    "imageType": "gold"
+   },
+   "volHostAttrHost": "cinder-kvm001@GPSSD#8209",
+   "multiattach": false,
+   "status": "in-use"
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "8273418d-c6d8-11f1-b698-0255ac100268",
+  "name": "aishell-turbo-ac9s.16xlarge.4-64c256g",
+  "provider": "cce",
+  "type": "nodes",
+  "properties": {
+   "chargeMode": "0",
+   "clusterUID": "e1abefa4-c6d3-11f1-968b-0255ac100244",
+   "nodeFlavor": "ac9s.16xlarge.4",
+   "az": "cn-north-4a",
+   "nodeStatus": "Active",
+   "nodeType": "node",
+   "serverID": "1e3a670e-6a57-4142-b0e6-896bb904b63c",
+   "vmStatus": "active"
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "92a93e53-c6fa-11f1-968b-0255ac100244",
+  "name": "aishell-turbo-ac9s.16xlarge.2-64c128g",
+  "provider": "cce",
+  "type": "nodes",
+  "properties": {
+   "chargeMode": "0",
+   "clusterUID": "e1abefa4-c6d3-11f1-968b-0255ac100244",
+   "nodeFlavor": "ac9s.16xlarge.2",
+   "az": "cn-north-4a",
+   "nodeStatus": "Active",
+   "nodeType": "node",
+   "serverID": "fca8df6c-504a-40c5-acf7-adf45c17807a",
+   "vmStatus": "active"
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "e1abefa4-c6d3-11f1-968b-0255ac100244",
+  "name": "aishell-turbo",
+  "provider": "cce",
+  "type": "clusters",
+  "properties": {
+   "clusterEOSVersion": "false",
+   "clusterType": "VirtualMachine",
+   "clusterSubnetId": "0e2714fd-3ec5-45ac-b89b-ba2235999af1",
+   "clusterEIP": "",
+   "clusterChargeMode": "0",
+   "clusterVpcId": "73e76381-c33b-46bc-975d-755e4f4f1190",
+   "clusterFlavor": "cce.s2.medium",
+   "clusterSecGroup": "6aedb539-4ece-42c0-bfc5-597321642bf1",
+   "clusterOldestVersion": "false",
+   "clusterVersion": "v1.36.2-r0",
+   "clusterStatus": "Available"
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "bd91e9a6ba7b41da9cab02dba6736008",
+  "name": "apig-aishell-api",
+  "provider": "apig",
+  "type": "instances",
+  "properties": {
+   "vpc_id": "73e76381-c33b-46bc-975d-755e4f4f1190",
+   "loadbalancer_provider": "elb",
+   "security_group_id": "f469adf0-16f3-439e-990d-2c5669634ac2",
+   "endpoint_service": {
+    "service_name": "cn-north-4.apig.d7deb47c-163b-4454-b58c-fe197756c661",
+    "created_at": "2026-10-13 12:42:09"
+   },
+   "endpoint_services": [
+    {
+     "service_name": "cn-north-4.apig.d7deb47c-163b-4454-b58c-fe197756c661",
+     "created_at": "2026-10-13 12:42:09"
+    }
+   ],
+   "type": "apig",
+   "spec": "PROFESSIONAL",
+   "maintain_begin": "22:00:00",
+   "virsubnet_id": "bd7495b2-d6a8-4af6-a7a9-35bc53b1d1be",
+   "maintain_end": "02:00:00",
+   "node_ips": {
+    "shubao": [
+     "172.16.224.35",
+     "172.16.224.52"
+    ]
+   },
+   "publicips": [
+    {
+     "bandwidth_size": 50,
+     "id": "f4a82cb0-8fa8-4fc1-b444-daeb9454a169",
+     "ip_address": "1.92.130.128"
+    }
+   ],
+   "privateips": [
+    {
+     "ip_address": "172.16.224.113"
+    },
+    {
+     "ip_address": "192.168.33.75"
+    }
+   ],
+   "logging_info": {
+    "log_group_name": "",
+    "log_stream_name": "",
+    "log_group_id": "",
+    "log_stream_id": ""
+   },
+   "available_zone_ids": "[cn-north-4a, cn-north-4b, cn-north-4g]",
+   "domain_infos": [
+    {
+     "ssl_name": "",
+     "verified_client_certificate_enabled": false,
+     "domain": "openapi.aishell.openbuildlab.com",
+     "ssl_id": ""
+    },
+    {
+     "ssl_name": "",
+     "verified_client_certificate_enabled": false,
+     "domain": "public.aishell.openbuildlab.com",
+     "ssl_id": ""
+    },
+    {
+     "ssl_name": "",
+     "verified_client_certificate_enabled": false,
+     "domain": "openai.aishell.openbuildlab.com",
+     "ssl_id": ""
+    },
+    {
+     "ssl_name": "",
+     "verified_client_certificate_enabled": false,
+     "domain": "api.aishell.openbuildlab.com",
+     "ssl_id": ""
+    }
+   ],
+   "instance_version": "778df97682ad49b1916107e6c87fb1e9",
+   "user_id": "01a047e5f5f972b5a549ed4c6905f99f",
+   "authorization_statistics": [
+    {
+     "app_code_auth_type": "DISABLE",
+     "authorizer_id": "",
+     "auth_type": "IAM",
+     "api_count": 5
+    },
+    {
+     "app_code_auth_type": "DISABLE",
+     "authorizer_id": "",
+     "auth_type": "NONE",
+     "api_count": 4
+    }
+   ],
+   "subnet_id": "bd7495b2-d6a8-4af6-a7a9-35bc53b1d1be",
+   "instance_status": 6,
+   "ingress_ip": "172.16.224.113",
+   "status": "Running"
+  },
+  "region": "cn-north-4"
+ },
+ {
+  "id": "caa31640caaa4b62aff9e7b586c25dad",
+  "name": "apig-aishell-e2b",
+  "provider": "apig",
+  "type": "instances",
+  "properties": {
+   "vpc_id": "73e76381-c33b-46bc-975d-755e4f4f1190",
+   "loadbalancer_provider": "elb",
+   "security_group_id": "3b95e1af-e6f6-4f34-aa19-2da0896ca911",
+   "endpoint_service": {
+    "service_name": "cn-north-4.apig.c56b432b-ac87-46f9-9f42-2c88cc2fb91d",
+    "created_at": "2026-10-22 19:48:04"
+   },
+   "endpoint_services": [
+    {
+     "service_name": "cn-north-4.apig.c56b432b-ac87-46f9-9f42-2c88cc2fb91d",
+     "created_at": "2026-10-22 19:48:04"
+    }
+   ],
+   "type": "apig",
+   "spec": "BASIC",
+   "maintain_begin": "22:00:00",
+   "virsubnet_id": "0e2714fd-3ec5-45ac-b89b-ba2235999af1",
+   "maintain_end": "02:00:00",
+   "node_ips": {
+    "shubao": [
+     "172.16.253.247",
+     "172.16.252.102"
+    ]
+   },
+   "publicips": [
+    {
+     "bandwidth_size": 5,
+     "id": "74d23dac-4e38-4d20-b4d5-0a2446e1e291",
+     "ip_address": "124.71.224.51"
+    }
+   ],
+   "privateips": [
+    {
+     "ip_address": "172.16.245.70"
+    },
+    {
+     "ip_address": "192.168.34.117"
+    }
+   ],
+   "logging_info": {
+    "log_group_name": "",
+    "log_stream_name": "",
+    "log_group_id": "",
+    "log_stream_id": ""
+   },
+   "available_zone_ids": "[cn-north-4a, cn-north-4b, cn-north-4g]",
+   "domain_infos": [
+    {
+     "ssl_name": "",
+     "verified_client_certificate_enabled": false,
+     "domain": "api.aishell.openbuildlab.com",
+     "ssl_id": ""
+    }
+   ],
+   "instance_version": "778df97682ad49b1916107e6c87fb1e9",
+   "user_id": "01a047e5f5f972b5a549ed4c6905f99f",
+   "authorization_statistics": [
+    {
+     "app_code_auth_type": "DISABLE",
+     "authorizer_id": "",
+     "auth_type": "NONE",
+     "api_count": 43
+    }
+   ],
+   "subnet_id": "0e2714fd-3ec5-45ac-b89b-ba2235999af1",
+   "instance_status": 6,
+   "ingress_ip": "172.16.245.70",
+   "status": "Running"
+  },
+  "region": "cn-north-4"
+ }
+]

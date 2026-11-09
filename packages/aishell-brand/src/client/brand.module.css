@@ -1,0 +1,23 @@
+.mark {
+  display: inline-block;
+  background: url('../../assets/aishell.svg') center / contain no-repeat;
+  background-size: contain;
+}
+
+.name {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  height: 24px;
+  vertical-align: middle;
+}
+
+.name::before {
+  content: 'AI Shell';
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 24px;
+  letter-spacing: 0.04em;
+  color: var(--dsw-alias-label-primary, #1a1a1a);
+  white-space: nowrap;
+}

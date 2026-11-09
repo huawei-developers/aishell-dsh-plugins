@@ -1,0 +1,40 @@
+{
+  "name": "@huaweidevtools/aishell-dsh-plugins-root",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "description": "DSH plugin packages for Huawei Cloud AI Shell",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r run build:bundle && tsc -b && node scripts/aggregate.mjs",
+    "aggregate": "node scripts/aggregate.mjs",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc -b && pnpm run typecheck:tests",
+    "typecheck:tests": "tsc -b packages/*/tsconfig.test.json",
+    "lint": "oxlint packages",
+    "check:packages": "node scripts/check-packages.mjs",
+    "publish": "pnpm -r publish --publish-branch main",
+    "bump:version": "node scripts/bump-version.mjs",
+    "render:check": "node scripts/render-check/run.mjs",
+    "render:check:open": "node scripts/render-check/run.mjs --keep-open",
+    "render:preview": "node scripts/render-check/preview.mjs",
+    "fetch-examples": "node scripts/fetch-examples.mjs",
+    "build-permission-registry": "node --experimental-strip-types scripts/build-permission-registry.ts"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@types/node": "^22.10.0",
+    "@vitest/coverage-v8": "^2.1.0",
+    "lefthook": "^1.10.0",
+    "lightningcss": "^1.29.0",
+    "oxlint": "^0.15.0",
+    "tsdown": "^0.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}

@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      # Two parts. `tsc -b` builds the shipped sources; `typecheck:tests` then
+      # checks `src` and `tests` together through each package's
+      # `tsconfig.test.json`. The second part exists because `tsc -b` reads only
+      # the root tsconfig's `references`, whose projects all `include: ["src"]`
+      # — so before this, no test file was ever typechecked, and vitest strips
+      # types without checking them. Forty-seven real errors were sitting in the
+      # suites when it was first turned on.
+      - run: pnpm run typecheck
+      - run: pnpm run test:coverage
+      # The build runs in CI because nothing else exercises it: it is not typed
+      # by `tsc -b` alone, and the order of its two halves is what decides
+      # whether the shipped type declarations exist. Every failure it can have
+      # — a stale bundle, a declaration path that no artifact satisfies, drift
+      # in the generated aggregate patch — is invisible until someone packs or
+      # publishes.
+      - run: pnpm run build
+      # Fails when the generated cordis.patch.yml or the aggregate package.json
+      # no longer matches aggregate.yml, which a hand-edit or a renamed package
+      # would otherwise leave silently stale in the published tarball.
+      - run: node scripts/aggregate.mjs --check
+      # Asserts the types and files each manifest promises are actually in the
+      # tarball. `pnpm pack` needs no registry and no token, so this is the one
+      # place a broken `files`/`exports`/`types` combination is caught before
+      # publish rather than by the first consumer.
+      - run: node scripts/check-packages.mjs

@@ -1,0 +1,56 @@
+{
+  "name": "@huaweidevtools/aishell-dsh-credentials-store",
+  "description": "Credential storage + SDK-HMAC-SHA256 signing for aishell DSH plugins",
+  "version": "0.0.18",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yusheng-g/aishell-dsh-plugins.git",
+    "directory": "packages/credentials-store"
+  },
+  "type": "module",
+  "scripts": {
+    "build:bundle": "tsdown",
+    "prepublishOnly": "node ../../scripts/check-packages.mjs --prepublish --only credentials-store"
+  },
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./signer": {
+      "types": "./lib/signer.d.ts",
+      "default": "./lib/signer.js"
+    },
+    "./accounts": {
+      "types": "./lib/accounts.d.ts",
+      "default": "./lib/accounts.js"
+    },
+    "./verify": {
+      "types": "./lib/verify.d.ts",
+      "default": "./lib/verify.js"
+    },
+    "./scope": {
+      "types": "./lib/scope.d.ts",
+      "default": "./lib/scope.js"
+    },
+    "./paths": {
+      "types": "./lib/paths.d.ts",
+      "default": "./lib/paths.js"
+    }
+  },
+  "files": [
+    "lib/**/*.js",
+    "lib/**/*.d.ts",
+    "lib/**/*.map"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@napi-rs/keyring": "^2.1.1",
+    "node-machine-id": "^1.1.12"
+  }
+}

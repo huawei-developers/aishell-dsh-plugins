@@ -1,0 +1,10 @@
+pre-commit:
+  jobs:
+    - name: lint (staged)
+      glob: '*.{ts,tsx,mts,mjs}'
+      run: pnpm exec oxlint {staged_files}
+
+commit-msg:
+  jobs:
+    - name: conventional commit
+      run: pnpm exec tsx scripts/verify-commit-msg.ts {1}

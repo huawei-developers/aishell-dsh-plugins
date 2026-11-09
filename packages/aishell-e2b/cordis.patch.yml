@@ -1,0 +1,19 @@
+# aishell-e2b bundle patch: inserts the sandbox-tools plugin.
+# Install standalone: `dsh plugin --profile <name> add @huaweidevtools/aishell-dsh-e2b`
+#
+# The single row mounts a host-only plugin: it registers the sandbox tools
+# and one prompt section saying when a sandbox is the right tier rather than
+# provisioning real resources. It has no browser half.
+#
+# The name is close to the official `@deepseek-ai/dsh-e2b`, which is a
+# different thing: that package replaces the harness's execution world so all
+# of the agent's own file and command work runs remotely. This one adds tools
+# the agent calls deliberately, and leaves its local work local. Only the names
+# resemble each other.
+#
+# The row carries no `config`: the defaults point at the published AI Shell
+# services, and a profile that needs another deployment sets apiBaseUrl and
+# domain itself.
+- insert:
+    - id: aishell-e2b
+      name: '@huaweidevtools/aishell-dsh-e2b'

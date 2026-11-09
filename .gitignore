@@ -1,0 +1,19 @@
+.vscode
+.claude
+.opencode
+.scratch
+node_modules/
+lib/
+dist/
+*.tsbuildinfo
+.env
+.DSH_HOME/
+coverage/
+.coverage-times.json
+packed/
+
+.render-check/
+
+# Fetched data assets. Reproduce with `pnpm run fetch-examples`; shipped in the
+# published package, not in the repository.
+packages/aishell-deploy/src/data/*.zip

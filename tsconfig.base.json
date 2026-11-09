@@ -1,0 +1,44 @@
+{
+  "compilerOptions": {
+    // Syntax target, not API surface. The two are separate settings:
+    // `lib` below decides which library APIs typecheck, this decides what
+    // syntax the compiler may emit. `es2023` is what the toolchain can
+    // actually consume — vite 5's bundled esbuild (0.21.x) rejects `es2024`
+    // and emits "Unrecognized target environment" on every file it
+    // transforms, so declaring `es2024` here buys nothing and costs a wall of
+    // noise. Node floor is 22.19 (see package.json), which is ES2023-clean.
+    "target": "es2023",
+    // API surface, deliberately newer than the syntax target. The code uses
+    // `Promise.withResolvers`, which is ES2024; with `lib` left to follow
+    // `target` it would stop resolving. Decoupling the two is the supported
+    // way to say "emit ES2023 syntax, assume an ES2024 library".
+    //
+    // Stated explicitly rather than left to the default. An omitted `lib` does
+    // not mean "the target's libraries" — TypeScript picks the `.full` variant
+    // of the target, and `lib.es2024.full.d.ts` is `es2024` *plus `dom`*. So
+    // the default quietly put the entire DOM into these Node-only packages,
+    // where `document`, `localStorage` and browser `fetch` all typechecked.
+    // A package that needs the DOM says so itself (see the two client
+    // packages' tsconfigs); everything else gets Node plus this library set.
+    "lib": ["ES2024"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "declaration": true,
+    "sourceMap": true,
+    "declarationMap": true,
+    "composite": true,
+    "incremental": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "types": ["node"]
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "name": "@huaweidevtools/aishell-dsh-base",
+  "description": "aishell DSH profile base layer — aggregates aishell plugin packages over dsh-base",
+  "version": "0.0.18",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yusheng-g/aishell-dsh-plugins.git",
+    "directory": "packages/aishell-base"
+  },
+  "type": "module",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-base": "0.2.0-rc.1 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4 || 0.2.1-rc.5"
+  },
+  "files": [
+    "cordis.patch.yml",
+    "aggregate.yml"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@huaweidevtools/aishell-dsh-credentials-store": "workspace:*",
+    "@huaweidevtools/aishell-dsh-llm": "workspace:*",
+    "@huaweidevtools/aishell-dsh-client-credentials": "workspace:*",
+    "@huaweidevtools/aishell-dsh-brand": "workspace:*",
+    "@huaweidevtools/aishell-dsh-deploy": "workspace:*",
+    "@huaweidevtools/aishell-dsh-huaweicloud-docs": "workspace:*",
+    "@huaweidevtools/aishell-dsh-handbook": "workspace:*",
+    "@huaweidevtools/aishell-dsh-e2b": "workspace:*"
+  },
+  "scripts": {
+    "prepublishOnly": "node ../../scripts/check-packages.mjs --prepublish --only aishell-base"
+  }
+}

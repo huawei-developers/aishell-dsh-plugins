@@ -1,0 +1,10 @@
+# aishell-huaweicloud-docs bundle patch: inserts the documentation pointer.
+# Install standalone: `dsh plugin --profile <name> add @huaweidevtools/aishell-dsh-huaweicloud-docs`
+#
+# The single row mounts a host-only plugin: it registers one system-prompt
+# section naming the Huawei Cloud documentation index. It has no browser half
+# and no tools — the model reads the index with the ordinary web-fetch tool it
+# already has.
+- insert:
+    - id: aishell-huaweicloud-docs
+      name: '@huaweidevtools/aishell-dsh-huaweicloud-docs'

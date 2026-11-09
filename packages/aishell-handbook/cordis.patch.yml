@@ -1,0 +1,10 @@
+# aishell-handbook bundle patch: inserts the AI Shell handbook.
+# Install standalone: `dsh plugin --profile <name> add @huaweidevtools/aishell-dsh-handbook`
+#
+# The single row mounts a host-only plugin: it registers one system-prompt
+# section telling the model how AI Shell behaves — where feedback is sent from,
+# what the read-only permission mode does, how abilities are added. It has no
+# browser half and no tools; the model answers from it in prose.
+- insert:
+    - id: aishell-handbook
+      name: '@huaweidevtools/aishell-dsh-handbook'

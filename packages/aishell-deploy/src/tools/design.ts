@@ -58,9 +58,9 @@ import { deriveTopology, edgesOf } from '../topology.ts'
 import { ExistingResourceSchema } from '../existing.ts'
 import type { ExistingResource } from '../existing.ts'
 import type { OmittedResource } from '../topology.ts'
-import { deriveInventoryTopology } from '../existing-topology.ts'
-import { renderInventoryTopology } from '../d2-inventory.ts'
-import { renderTopology } from '../d2-design.ts'
+import { renderAccountDiagram } from '../diagram.ts'
+import type { Diagram } from '../svg-render.ts'
+import { renderDesignDiagram } from '../design-render.ts'
 import { runTerraform } from '../terraform-run.ts'
 import { providerInstalled } from '../gates/provider_installed.ts'
 import { computeTfHash } from '../utils/hash.ts'
@@ -240,7 +240,9 @@ async function handleValidateDesign(
   let svg: string
   let d2: string
   try {
-    const rendered = await renderTopology(topology, edges)
+    // Both pictures — the design and the account — go through the same layout
+    // and renderer, so they can be compared side by side. See `design-render.ts`.
+    const rendered = renderDesignDiagram(topology, edges)
     svg = rendered.svg
     d2 = rendered.source
   } catch (error) {
@@ -557,19 +559,27 @@ async function handleInventoryOnly(
     )
   }
 
-  const topology = deriveInventoryTopology(withProperties.map(resource => ({
-    id: resource.id,
-    provider: resource.provider ?? '',
-    type: resource.type,
-    ...(resource.name === undefined ? {} : { name: resource.name }),
-    ...(resource.region === undefined ? {} : { region: resource.region }),
-    properties: resource.properties ?? {},
-  })))
-
   let svg: string
   let d2: string
+  let diagram: Diagram
   try {
-    const rendered = await renderInventoryTopology(topology)
+    // The account is drawn by this plugin's own layout and renderer rather than
+    // by a graph engine: its structure is nested regions, and a graph layout
+    // puts sibling containers side by side whatever they hold. See `layout.ts`.
+    //
+    // The resources go in as the caller sent them, `properties` included — that
+    // object is where every relationship lives, and a derivation that dropped it
+    // would leave the picture a list of unconnected boxes.
+    const resources = withProperties.map(resource => ({
+      id: resource.id,
+      provider: resource.provider ?? '',
+      type: resource.type,
+      ...(resource.name === undefined ? {} : { name: resource.name }),
+      ...(resource.region === undefined ? {} : { region: resource.region }),
+      properties: resource.properties ?? {},
+    }))
+    const rendered = renderAccountDiagram(resources)
+    diagram = rendered.diagram
     svg = rendered.svg
     d2 = rendered.source
   } catch (error) {
@@ -613,22 +623,22 @@ async function handleInventoryOnly(
         'There is no configuration to validate — this picture is of resources that already '
         + 'exist. Write a network .tf and call this tool again to have it checked.',
     },
-    resources: topology.nodes.map(node => ({
-      id: node.id,
-      type: `${node.provider}/${node.type}`,
-      label: node.label,
-      parent: node.parent ?? null,
+    resources: diagram.boxes.map(box => ({
+      id: box.id,
+      type: diagram.roles.get(box.id) === 'container' ? 'container' : 'resource',
+      label: box.label,
+      depth: box.depth,
     })),
-    edges: topology.edges.map(edge => ({
+    edges: diagram.edges.map(edge => ({
       from: edge.from,
       to: edge.to,
-      attribute: edge.attribute,
-      contains: edge.contains,
+      kind: edge.kind,
+      label: edge.label,
     })),
     summary: {
-      drawn: topology.nodes.length,
-      edges: topology.edges.length,
-      nested: topology.nodes.filter(node => node.parent !== undefined).length,
+      drawn: diagram.boxes.length,
+      edges: diagram.edges.length,
+      nested: diagram.boxes.filter(box => box.depth > 0).length,
       ...(provided === 0 ? {} : { without_properties: provided }),
       validation: 'skipped',
     },

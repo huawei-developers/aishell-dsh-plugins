@@ -26,7 +26,7 @@
  */
 
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /** Repository root, derived from this file so the script runs from anywhere. */
@@ -80,7 +80,7 @@ for (const dir of readdirSync(PACKAGES).sort()) {
 
   if (touched) {
     writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
-    console.log(`[vet] ${path.slice(ROOT.length + 1)}`)
+    console.log(`[vet] ${relative(ROOT, path)}`)
   } else {
     untouched += 1
   }

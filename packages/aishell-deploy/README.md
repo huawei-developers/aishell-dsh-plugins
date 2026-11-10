@@ -149,9 +149,12 @@ src/
   hcl.ts                 reading the configuration
   topology.ts            the network as a tree
   network-checks.ts      what terraform validate cannot see
-  d2-engine.ts           the D2 renderer: source in, SVG out
-  d2-design.ts           drawing what a .tf declares
-  d2-inventory.ts        drawing the account as it stands
+  layout.ts              placing nested boxes, sized from their labels
+  svg-render.ts          drawing placed boxes and connectors
+  design-render.ts       a .tf design as a box tree
+  account-view.ts        the account as placement, guarding and policy
+  traffic.ts             the chains traffic follows in
+  diagram.ts             the account as a box tree
   existing-topology.ts   the account's own graph shape
   catalog.ts             what the region sells: flavours, images, RDS specs
   rating-map.ts          terraform type → BSS service + spec/capacity attributes

@@ -1,7 +1,7 @@
 {
   "name": "@huaweidevtools/aishell-dsh-deploy",
   "description": "Huawei Cloud infrastructure tools for DSH — Terraform, OpenAPI, resource inventory, cost estimates",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "publishConfig": {
     "access": "public"
   },

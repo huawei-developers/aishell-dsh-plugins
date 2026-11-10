@@ -1,7 +1,7 @@
 {
   "name": "@huaweidevtools/aishell-dsh-handbook",
   "description": "Tells LLM how AI Shell works — where feedback goes, what the read-only switch means, how to extend the harness",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "publishConfig": {
     "access": "public"
   },

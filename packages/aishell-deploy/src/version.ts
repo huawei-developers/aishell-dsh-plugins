@@ -19,4 +19,4 @@
  * written by earlier releases carry it — so it is kept even though there is no
  * server.
  */
-export const SERVER_VERSION = 'aishell-deploy 0.0.20'
+export const SERVER_VERSION = 'aishell-deploy 0.0.21'

@@ -1,7 +1,7 @@
 {
   "name": "@huaweidevtools/aishell-dsh-client-credentials",
   "description": "AI Shell credentials — chip-opened web form for storing Huawei Cloud AK/SK in the credential store",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "publishConfig": {
     "access": "public"
   },

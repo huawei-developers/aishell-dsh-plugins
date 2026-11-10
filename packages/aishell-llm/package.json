@@ -1,7 +1,7 @@
 {
   "name": "@huaweidevtools/aishell-dsh-llm",
   "description": "aishell LLM gateway adapter for DSH — OpenAI-compatible, Huawei Cloud AK/SK auth via credential store",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "publishConfig": {
     "access": "public"
   },

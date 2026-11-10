@@ -50,6 +50,7 @@ import { createCredentialsStore } from '@huaweidevtools/aishell-dsh-credentials-
 import { createRegistrar, toToolDefinition } from './bridge.ts'
 import { registerAllTools } from './tools/index.ts'
 import { configureCredentials, forgetAccount } from './credentials.ts'
+import { clearCredentials } from '@huaweidevtools/aishell-dsh-credentials-store/accounts'
 import { defaultMode, getMode, setMode, writesAllowed } from './permission/mode.ts'
 import { createPermissionRoutes, PERMISSION_PATH } from './permission-route.ts'
 import { registerPermissionPolicyContext } from './permission-context.ts'
@@ -142,6 +143,22 @@ export function apply(ctx: Context, config: Config): void {
     // Read through a thunk, and left undefined when the operator set nothing:
     // an unset region means "each resource's plan decides", not "cn-north-4".
     get region(): string | undefined { return config.defaultRegion.get() },
+    // A tool call reaching IAM and being refused is the fastest evidence this
+    // process will ever get that the stored pair has stopped working — a
+    // temporary credential whose token expired, or a permanent key deleted in
+    // the console. Either way the pair cannot be used again, and leaving it
+    // stored keeps the credential card offering a signed-in view that cannot
+    // work.
+    //
+    // Clearing goes through the same event `aishell-credentials` emits for its
+    // own discard, so every consumer that caches something derived from the
+    // pair — a resolved account, a sandbox key — drops it. The store is shared;
+    // so is the notification.
+    onRejected: () => {
+      clearCredentials(store)
+      forgetAccount()
+      ctx.emit('aishell/credentials-updated')
+    },
   })
 
   // ── Tools ────────────────────────────────────────────────────────────────

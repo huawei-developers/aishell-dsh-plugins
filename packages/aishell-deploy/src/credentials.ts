@@ -78,6 +78,21 @@ export interface CredentialSource {
   readonly store: CredentialsStore
   /** The fallback region an operator configured, if any. */
   readonly region?: string | undefined
+  /**
+   * Told when IAM refuses the stored credential.
+   *
+   * A tool call reaching IAM and being refused is the FASTEST evidence this
+   * plugin can get that the credential has stopped working — faster than any
+   * poll, because it happens exactly when someone is waiting. The owner of the
+   * store is the only party that can act on it: it clears the pair and tells
+   * the interface, which is what returns the credential card to its
+   * not-signed-in state.
+   *
+   * Not called for a transient failure. `status === 0` and a 5xx mean the
+   * question never reached IAM, and clearing on those would log a person out
+   * because their network blipped.
+   */
+  readonly onRejected?: () => void
 }
 
 let source: CredentialSource | undefined
@@ -210,6 +225,14 @@ export async function loadAccount(): Promise<AccountIdentity | undefined> {
     if (result.status === 0 || result.status >= 500) {
       throw new Error(`${result.message} The stored credentials were not rejected — retry.`)
     }
+    // IAM refused the pair: it is not usable for anything this plugin does, and
+    // the fastest way to say so is here, at the moment a call found out. The
+    // alternative is waiting for a poll that may be minutes away, during which
+    // the interface offers a signed-in card that cannot work.
+    // `verifyCredentials` already established this is a rejection rather than a
+    // transport failure, so no second verification is needed — that is the
+    // "verify before discarding" rule, satisfied by the call that got here.
+    source?.onRejected?.()
     return undefined
   }
   cachedAccount = {

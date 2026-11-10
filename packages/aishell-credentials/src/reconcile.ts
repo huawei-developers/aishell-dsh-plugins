@@ -146,6 +146,14 @@ export function createCredentialReconciler(deps: CredentialReconcilerDeps): Cred
       // rotation (the material differs from the last verified set). A failing
       // verify still records the fingerprint, so the same material is not retried
       // every tick — the retry keys on the material changing, not on time alone.
+      //
+      // A credential that stops working WITHOUT its material changing — a
+      // temporary token expiring, a permanent key deleted in the console — is
+      // therefore not noticed here. That is deliberate: a tool call reaching IAM
+      // learns it at the moment it matters, and reports it through
+      // `CredentialSource.onRejected`, which clears the store and announces the
+      // change. A poll would find the same fact, later, and only while the
+      // process happened to be running.
       const fingerprint = materialFingerprint(pair!.ak, pair!.sk, pair!.securityToken)
       const materialChanged = fingerprint !== lastVerifyFingerprint
       if (!materialChanged) return

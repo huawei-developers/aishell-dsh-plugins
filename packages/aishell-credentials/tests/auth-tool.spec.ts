@@ -68,6 +68,7 @@ let pendingResolvers: Array<(outcome: unknown) => void> = []
  * none appears. See the `abandoned call` cases.
  */
 let releases: boolean[] = []
+let discards: boolean[] = []
 
 /**
  * Answer the oldest unanswered form.
@@ -109,6 +110,9 @@ function mount(store: MemoryBackend, hasTools: boolean = true): void {
     // Mirrors the host's bookkeeping: a call that stops waiting gives the
     // shared request back. Recorded so a test can assert the release happened.
     releaseForm: () => { releases.push(true) },
+    // A refused credential is cleared before the form opens, so the form asks
+    // for a pair instead of showing one that cannot work.
+    discard: () => { discards.push(true) },
   })
 }
 
@@ -124,6 +128,7 @@ beforeEach(() => {
   formRequests = []
   pendingResolvers = []
   releases = []
+  discards = []
   verifiedWith = undefined
   verdict = {
     ok: true,
@@ -226,6 +231,62 @@ describe('auth tool — verification', () => {
     const call = tool().execute({}, inSession('session-1'))
     await new Promise(resolve => setTimeout(resolve, 10))
     expect(formRequests).toEqual(['session-1'])
+
+    answerForm('cancelled')
+    await expect(call).rejects.toThrow(/cancelled/)
+  })
+
+  it('clears a refused pair before opening the form', async () => {
+    // A credential IAM refused cannot be used again — a temporary token that
+    // expired, or a key deleted in the console — and re-entering the same pair
+    // changes nothing. Clearing first is what makes the form ask for a pair
+    // instead of showing a signed-in card whose only button does nothing.
+    const store = new MemoryBackend()
+    writeHuaweiCloud(store, { ak: 'AK1', sk: 'SK1' })
+    verdict = { ok: false, status: 401, message: 'Huawei Cloud rejected the credentials (HTTP 401)' }
+    mount(store)
+
+    const call = tool().execute({}, inSession('session-1'))
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(discards).toHaveLength(1)
+    // And the form is up: the person is being asked, not shown.
+    expect(formRequests).toEqual(['session-1'])
+
+    answerForm('cancelled')
+    await expect(call).rejects.toThrow(/cancelled/)
+  })
+
+  it('keeps a pair the call could not reach IAM to check', async () => {
+    // `status === 0` means the request never arrived. The credential may be
+    // perfectly good, and clearing it would log a person out because their
+    // network blipped.
+    const store = new MemoryBackend()
+    writeHuaweiCloud(store, { ak: 'AK1', sk: 'SK1' })
+    verdict = { ok: false, status: 0, message: 'could not reach IAM' }
+    mount(store)
+
+    const call = tool().execute({}, inSession('session-1'))
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(discards).toHaveLength(0)
+
+    answerForm('cancelled')
+    await expect(call).rejects.toThrow(/cancelled/)
+  })
+
+  it('keeps a pair when IAM is the one failing', async () => {
+    // A 5xx is IAM breaking rather than refusing: the same pair may work as
+    // soon as IAM recovers, so it is not discarded.
+    const store = new MemoryBackend()
+    writeHuaweiCloud(store, { ak: 'AK1', sk: 'SK1' })
+    verdict = { ok: false, status: 503, message: 'IAM is unavailable' }
+    mount(store)
+
+    const call = tool().execute({}, inSession('session-1'))
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(discards).toHaveLength(0)
 
     answerForm('cancelled')
     await expect(call).rejects.toThrow(/cancelled/)

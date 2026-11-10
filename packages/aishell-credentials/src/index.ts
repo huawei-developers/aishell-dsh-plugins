@@ -952,6 +952,22 @@ export function apply(ctx: Context, config: Config): void {
       // running this does nothing.
       loginFlow.cancel()
     },
+    // IAM refused the stored pair this call was holding. Same action the
+    // reconciler takes on a refusal, reached sooner: the tool found out while a
+    // person was waiting for an answer, so the interface stops offering a
+    // signed-in view that cannot work.
+    discard: () => {
+      clearCredentials(store)
+      // The recorded status follows the store at once, not on the next
+      // reconcile tick: the form this call is about to open reads it, and a
+      // stale `credentialsStored: true` would draw the signed-in card with
+      // nothing behind it.
+      recordStatus([
+        { op: 'set', path: ['credentialsStored'], value: false },
+        { op: 'unset', path: ['accessKeyIdHint'] },
+      ])
+      announceCredentialsChanged()
+    },
   })
 
   // The browser half renders the credential form; suppress the auto-generated

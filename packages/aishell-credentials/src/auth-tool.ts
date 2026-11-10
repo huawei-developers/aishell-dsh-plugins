@@ -112,6 +112,17 @@ export interface AuthToolDeps {
    * an error, which is exactly why nothing else remembers to do this.
    */
   readonly releaseForm: () => void
+  /**
+   * Remove the stored pair and tell the interface.
+   *
+   * Called when IAM refuses the pair this call was holding. The refusal is the
+   * fastest evidence the credential has stopped working — a temporary token
+   * expired, or a key deleted in the console — and both make re-entering the
+   * SAME pair useless. Clearing first is what turns the next form into "sign
+   * in from scratch" instead of a signed-in card whose only button does
+   * nothing.
+   */
+  readonly discard: () => void
 }
 
 
@@ -236,6 +247,10 @@ async function runAuth(
   if (stored !== undefined) {
     const verified = await verifyCredentials(stored, { region: VERIFY_REGION })
     if (verified.ok) return describeAccount(verified)
+    // Refused rather than merely unreachable: this pair cannot be used again,
+    // so it is cleared before the form opens. A transport failure (status 0) or
+    // an IAM outage (5xx) is left alone — the pair may be perfectly good.
+    if (verified.status === 401 || verified.status === 403) deps.discard()
   }
 
   // From here the call is blocked on a person.

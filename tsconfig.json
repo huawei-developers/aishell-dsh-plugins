@@ -10,6 +10,7 @@
     { "path": "./packages/aishell-huaweicloud-docs" },
     { "path": "./packages/aishell-handbook" },
     { "path": "./packages/aishell-e2b" },
-    { "path": "./packages/aishell-deeplink" }
+    { "path": "./packages/aishell-deeplink" },
+    { "path": "./packages/aishell-share" }
   ]
 }

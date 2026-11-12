@@ -1,0 +1,48 @@
+# aishell-share bundle patch: mounts the session-sharing plugin.
+#
+# ## What it does
+#
+# Two flows over one package. Sharing reads a session, builds a package and
+# uploads it to the share service, answering the link it gets back. Importing
+# reads such a package and writes it as a stored session this machine owns.
+#
+# ## The two halves
+#
+# The Page claims the `share` link family through `ctx.aishellDeepLinks`, the
+# service `aishell-dsh-deeplink` provides there, and hosts the dialog. The Host
+# half owns the session store: reading a log to share it, writing one to import
+# it. Neither can do the other's work — the Page cannot see the session store,
+# and the Host cannot see the link claims.
+#
+# A family has exactly one claimant. `share` is this plugin's alone: a second
+# registration throws, which is what keeps two plugins from silently splitting a
+# URL space users see. A future `aishell://share/<kind>/<token>` shape is handled
+# inside this plugin's handler, not by another claim.
+#
+# ## Why an import is written, not attached
+#
+# An imported conversation must be a session like any other, so it is stored
+# through `sessionPersistence` rather than attached to the live store. A copy
+# that existed only in memory would be listed by the sidebar (which reads
+# persistence), disappear on restart, and reject its own first message — the
+# resume path opens the id for write. The write is also the entire creation:
+# reading the copy later is the ordinary resume every stored session takes.
+#
+# ## The service origin
+#
+# `serviceOrigin` is required, with no default in the package: the address a
+# conversation is uploaded is the deployment's decision, and a value compiled
+# into a plugin would be one nobody chose. This row supplies it, and reads the
+# environment first so an operator can point at a staging service without
+# republishing the bundle. Keep the `!!js` expression — a literal here would
+# make that switch silently stop working.
+#
+# ## Requires aishell-dsh-deeplink
+#
+# Without it `ctx.aishellDeepLinks` is absent and the Page half does not
+# activate; without `sessionPersistence` the Host half does not either.
+- insert:
+    - id: aishell-share
+      name: '@huaweidevtools/aishell-dsh-share'
+      config:
+        serviceOrigin: !!js process.env.AISHELL_SHARE_ORIGIN ?? 'https://public.aishell.openbuildlab.com'

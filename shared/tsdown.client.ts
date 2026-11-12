@@ -72,6 +72,11 @@ export function clientBundle(id: string, libEntry: readonly string[]): UserConfi
     fixedExtension: false,
     dts: true,
     clean: true,
+    // Every bare specifier resolves from the deployment's `node_modules` at
+    // run time. Inlining one would ship a second copy of a package the Host
+    // already loaded — two class identities for the same service, and a
+    // bundle that grows by whatever the framework weighs.
+    external: (source: string) => !source.startsWith('.') && !source.startsWith('/'),
   }
 
   if (!hasClient) return [nodeConfig]

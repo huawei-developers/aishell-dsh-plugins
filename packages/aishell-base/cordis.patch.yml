@@ -43,6 +43,13 @@
     - id: aishell-deeplink
       name: '@huaweidevtools/aishell-dsh-deeplink'
 
+# from ../aishell-share
+- insert:
+    - id: aishell-share
+      name: '@huaweidevtools/aishell-dsh-share'
+      config:
+        serviceOrigin: !!js process.env.AISHELL_SHARE_ORIGIN ?? 'https://public.aishell.openbuildlab.com'
+
 # overridden upstream rows (id-targeted; this layer applies after the official bundles)
 - id: agent-default-model
   config: { provider: aishell, model: trial }

@@ -14,6 +14,7 @@ patchFrom:
   - ../aishell-huaweicloud-docs
   - ../aishell-handbook
   - ../aishell-e2b
+  - ../aishell-deeplink
 deps:
   - ../credentials-store
   - ../aishell-llm
@@ -23,6 +24,7 @@ deps:
   - ../aishell-huaweicloud-docs
   - ../aishell-handbook
   - ../aishell-e2b
+  - ../aishell-deeplink
 override:
   # The official base pins the entry-point default to deepseek-official /
   # deepseek-flash. AI Shell's only chat route is the aishell gateway, so the

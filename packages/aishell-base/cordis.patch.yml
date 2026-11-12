@@ -38,6 +38,11 @@
     - id: aishell-e2b
       name: '@huaweidevtools/aishell-dsh-e2b'
 
+# from ../aishell-deeplink
+- insert:
+    - id: aishell-deeplink
+      name: '@huaweidevtools/aishell-dsh-deeplink'
+
 # overridden upstream rows (id-targeted; this layer applies after the official bundles)
 - id: agent-default-model
   config: { provider: aishell, model: trial }

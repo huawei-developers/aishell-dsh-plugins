@@ -121,8 +121,13 @@ export interface AuthToolDeps {
    * SAME pair useless. Clearing first is what turns the next form into "sign
    * in from scratch" instead of a signed-in card whose only button does
    * nothing.
+   *
+   * Resolves once the interface's status document holds the cleared state. The
+   * form opens right after this returns and the card reads that document, so a
+   * discard that resolved before the write landed would draw a signed-in card
+   * over an empty store.
    */
-  readonly discard: () => void
+  readonly discard: () => Promise<void>
 }
 
 
@@ -250,7 +255,12 @@ async function runAuth(
     // Refused rather than merely unreachable: this pair cannot be used again,
     // so it is cleared before the form opens. A transport failure (status 0) or
     // an IAM outage (5xx) is left alone — the pair may be perfectly good.
-    if (verified.status === 401 || verified.status === 403) deps.discard()
+    //
+    // Awaited: the form opens on the next line and the card reads the status
+    // document to decide which view to draw. Clearing the store without waiting
+    // for that document to say so would draw the signed-in card — account name,
+    // confirm, logout — over the empty store this line just made.
+    if (verified.status === 401 || verified.status === 403) await deps.discard()
   }
 
   // From here the call is blocked on a person.

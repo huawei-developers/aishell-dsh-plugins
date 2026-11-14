@@ -147,13 +147,13 @@ export function createCredentialReconciler(deps: CredentialReconcilerDeps): Cred
       // verify still records the fingerprint, so the same material is not retried
       // every tick — the retry keys on the material changing, not on time alone.
       //
-      // A credential that stops working WITHOUT its material changing — a
-      // temporary token expiring, a permanent key deleted in the console — is
-      // therefore not noticed here. That is deliberate: a tool call reaching IAM
-      // learns it at the moment it matters, and reports it through
-      // `CredentialSource.onRejected`, which clears the store and announces the
-      // change. A poll would find the same fact, later, and only while the
-      // process happened to be running.
+      // The question this tick answers is "what is in the store, and has it been
+      // verified since it arrived?" — not "is it still good?". A credential can
+      // stop working without its material changing (an expired STS token, a key
+      // deleted in the console), and no amount of re-reading the store reveals
+      // that. Answering it needs an IAM call, which costs a round trip and is
+      // why it is not on this tick: `./revalidate.ts` asks it, and only while
+      // someone is looking at the answer.
       const fingerprint = materialFingerprint(pair!.ak, pair!.sk, pair!.securityToken)
       const materialChanged = fingerprint !== lastVerifyFingerprint
       if (!materialChanged) return

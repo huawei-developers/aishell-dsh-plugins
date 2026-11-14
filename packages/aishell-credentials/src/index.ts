@@ -52,6 +52,7 @@ import {
   type RecordStatus,
   type StatusOp,
 } from './reconcile.ts'
+import { revalidate } from './revalidate.ts'
 
 /**
  * Read the request token out of a save body.
@@ -181,6 +182,28 @@ const CANCEL_PATH = '/api/aishell/credentials/cancel'
  * destroys the credential the call was waiting to use.
  */
 const CONFIRM_PATH = '/api/aishell/credentials/confirm'
+
+/**
+ * Route the browser calls on a timer to re-check the stored credential.
+ *
+ * ## Why this is a route and not a Host timer
+ *
+ * The Host cannot tell whether anyone is looking. A timer here would keep
+ * asking IAM about a credential nobody has on screen — and a desktop app is
+ * usually left open and unwatched, which is the worst case for a poll.
+ *
+ * The browser knows two things the Host does not: whether the page is visible,
+ * and whether the credential the person is looking at is the one being asked
+ * about. So the cadence lives there (`./client/credential-watch.ts`) and this
+ * route is the single question it asks.
+ *
+ * ## Why it is separate from GET /credentials
+ *
+ * The status route is read on every chip render and must stay cheap. This one
+ * calls IAM, and a route that costs a network round trip should be one a caller
+ * opts into rather than one that fires whenever a component mounts.
+ */
+const REVALIDATE_PATH = '/api/aishell/credentials/revalidate'
 
 /** Largest credential body accepted; a real payload is well under 1 KiB. */
 const MAX_BODY_BYTES = 8 * 1024
@@ -599,6 +622,45 @@ export function apply(ctx: Context, config: Config): void {
     })
   }
 
+  /**
+   * Record status and wait for the document to hold it.
+   *
+   * ## Why the answer needs this and `recordStatus` is not enough
+   *
+   * The browser reads the settings document, not the Host's mirror. `mutate` is
+   * asynchronous and the value reaches that document a moment later, so an
+   * answer that says "the store was cleared" can reach the page while the page's
+   * own view of the document still says a credential is stored. The card then
+   * renders the signed-in view over an empty store — the contradiction this
+   * whole path exists to remove.
+   *
+   * Awaiting the same `mutate` the mirror already followed closes that window:
+   * by the time this resolves, the write has been applied, so the page's next
+   * read of the document agrees with the answer.
+   *
+   * A refused write is rolled back exactly as `recordStatus` does it, and the
+   * caller still gets its answer — the store is the truth, and the answer is
+   * about the store.
+   *
+   * @param ops - the status edits to apply.
+   */
+  const recordStatusAndSettle = async (ops: readonly StatusOp[]): Promise<void> => {
+    if (ns === undefined) {
+      mirrorOps(ops)
+      return
+    }
+    const before = { stored: recordedStored, hint: recordedHint }
+    mirrorOps(ops)
+    const after = { stored: recordedStored, hint: recordedHint }
+    await ctx.settings.mutate(ns, ops).catch((error: unknown) => {
+      if (recordedStored === after.stored && recordedHint === after.hint) {
+        recordedStored = before.stored
+        recordedHint = before.hint
+      }
+      ctx.logger.warn(error)
+    })
+  }
+
   const routes = createCredentialRoutes({
     store,
     verify: verifyCredentials,
@@ -843,6 +905,79 @@ export function apply(ctx: Context, config: Config): void {
     fetch: () => { reconciler.resetVerifyBaseline(); return routes.clear() },
   }), 'aishell-credentials: clear route')
 
+  // Re-check the stored credential on the browser's timer, and answer with what
+  // the check found. The store is touched only when IAM refused the pair, which
+  // `revalidate` owns — one decision table, shared with the `auth` tool, so the
+  // two cannot disagree about what a failed check means.
+  //
+  // The answer carries no credential and no account id: the browser already
+  // knows whether it is signed in, and what it needs is whether that is still
+  // true. `discarded` says the store was cleared as a result, which is the one
+  // fact the card has to react to immediately.
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: REVALIDATE_PATH,
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (): Promise<Response> => {
+      // Re-derive the document first, so the answer and the status the page
+      // reads cannot disagree. Without this the `absent` arm below answers
+      // "nothing is stored" while the document still says something is — the
+      // page would then keep its timer armed on a credential that does not
+      // exist, because presence is read from the document.
+      reconciler.reconcile()
+      const pair = readStoredPair(store)
+      // Nothing stored: not a failure, and not a check. The browser stops its
+      // timer on the same condition, so this arm exists for the request that
+      // was already in flight when the store emptied.
+      if (pair === undefined) return Response.json({ ok: true, state: 'absent' })
+
+      // The document write that accompanies a discard has to be applied BEFORE
+      // this answer reaches the page. The page reads the settings document for
+      // its own view of the status, so an answer of `discarded` that arrived
+      // ahead of the write would leave the card drawing the signed-in view over
+      // an empty store. `revalidate` calls `discard` synchronously, so the
+      // promise it stores here is awaited below, after the verdict is known.
+      let statusSettled: Promise<void> | undefined
+
+      const validity = await revalidate(pair, {
+        verify: (credential) => verifyCredentials(
+          credential.ak,
+          credential.sk,
+          credential.securityToken,
+        ),
+        isRejection: (error: unknown): boolean => error instanceof CredentialRejectedError,
+        // `revalidate` decides WHEN to discard; this supplies what discarding
+        // means for this package — the store write, plus the status document
+        // that write has to be reflected in. Splitting it that way keeps the
+        // classification in one module and the document in the one that owns it.
+        discard: () => {
+          clearCredentials(store)
+          statusSettled = recordStatusAndSettle([
+            { op: 'set', path: ['credentialsStored'], value: false },
+            { op: 'unset', path: ['accessKeyIdHint'] },
+            // Kept, not cleared: the message is the only record of why the
+            // session stopped being signed in, and the next save or clear
+            // overwrites it anyway.
+            { op: 'set', path: ['lastError'], value: 'IAM refused the stored credential.' },
+          ])
+          announceCredentialsChanged()
+        },
+      })
+      await statusSettled
+
+      if (validity.kind === 'refused') {
+        return Response.json({ ok: true, state: 'discarded' })
+      }
+      if (validity.kind === 'unreachable') {
+        // Deliberately not `ok: false`: the request succeeded and its answer is
+        // "I could not reach IAM". A transport failure here would read as the
+        // route being down, which is a different fact.
+        return Response.json({ ok: true, state: 'unreachable' })
+      }
+      return Response.json({ ok: true, state: 'valid' })
+    },
+  }), 'aishell-credentials: revalidate route')
+
   // Re-derive the status from the store now (boot) and on a timer, so a
   // credential written after boot — the env's `sync-hw-creds` writes the
   // keyring every minute, and the first write can land after this plugin
@@ -956,15 +1091,22 @@ export function apply(ctx: Context, config: Config): void {
     // reconciler takes on a refusal, reached sooner: the tool found out while a
     // person was waiting for an answer, so the interface stops offering a
     // signed-in view that cannot work.
-    discard: () => {
+    //
+    // Resolves once the document holds the cleared status, not just once the
+    // store is empty. The tool opens the form immediately after, and the card
+    // picks its view from that document: returning before the write landed drew
+    // the signed-in card — account name, confirm, logout — over a store this
+    // call had already emptied.
+    discard: async () => {
       clearCredentials(store)
       // The recorded status follows the store at once, not on the next
       // reconcile tick: the form this call is about to open reads it, and a
       // stale `credentialsStored: true` would draw the signed-in card with
       // nothing behind it.
-      recordStatus([
+      await recordStatusAndSettle([
         { op: 'set', path: ['credentialsStored'], value: false },
         { op: 'unset', path: ['accessKeyIdHint'] },
+        { op: 'set', path: ['lastError'], value: 'IAM refused the stored credential.' },
       ])
       announceCredentialsChanged()
     },

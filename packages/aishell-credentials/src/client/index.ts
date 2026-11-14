@@ -47,6 +47,7 @@ import { decodeRequest } from '../form-request.ts'
 import { probeBrowserRoute, startBrowserLogin as startLogin } from './login-flow.ts'
 import type { CredentialPrefill } from '../prefill.ts'
 import { createCredentialFormVisibility } from './credential-form-visibility.ts'
+import { startCredentialWatch, type RevalidateState } from './credential-watch.ts'
 import { installChipStyles } from './huawei-mark.ts'
 import { installFormMotionStyles } from './form-motion.ts'
 import { NS, zh, en, type AishellLocaleKey } from './locales.ts'
@@ -80,6 +81,13 @@ const CANCEL_ROUTE = 'api/aishell/credentials/cancel'
 const CONFIRM_ROUTE = 'api/aishell/credentials/confirm'
 /** Prefill route; returns the values the host's environment already holds. */
 const PREFILL_ROUTE = 'api/aishell/credentials/prefill'
+/**
+ * Revalidation route; asks the Host to re-check the stored pair against IAM.
+ *
+ * Separate from the status route on purpose: the status read runs on every chip
+ * render and must stay cheap, while this one costs an IAM round trip.
+ */
+const REVALIDATE_ROUTE = 'api/aishell/credentials/revalidate'
 /**
  * POST one JSON body to a Host credential route and read back its verdict.
  * A non-JSON or unreadable body is reported as a transport failure rather than
@@ -296,6 +304,65 @@ export function apply(ctx: ClientContext): void {
   applyFormRequest()
 
   ctx.effect(() => () => { visibility.dispose() }, 'aishell-credentials: credential form teardown')
+
+  // Keep the signed-in state honest about IAM.
+  //
+  // The status document is derived from the store, and a pair can stop working
+  // with nothing in the store moving — an expired STS token, a key deleted in
+  // the console. Without a check the card and the chips keep reporting "signed
+  // in" until a tool call fails, which is the product contradicting itself at
+  // the one moment the person is waiting.
+  //
+  // The cadence lives here because this side is the only one that can see
+  // whether a window is on screen; `credential-watch.ts` holds the rules.
+  const watch = startCredentialWatch({
+    hasCredential: () => status.getSnapshot().hasAccessKey,
+    // A request that could not be delivered is not an answer about the
+    // credential: reported as `undefined` so the watch backs off rather than
+    // treating the silence as a verdict. The signal is the watch's own, so a
+    // fatal dispose drops the request instead of leaving it to reach the Host
+    // after the page stopped caring.
+    revalidate: async (signal): Promise<RevalidateState | undefined> => {
+      const response = await fetch(REVALIDATE_ROUTE, { method: 'POST', signal }).catch(() => undefined)
+      if (response?.ok !== true) return undefined
+      const body = await response.json().catch(() => undefined) as { state?: unknown } | undefined
+      const state = body?.state
+      return state === 'valid' || state === 'discarded' || state === 'absent' || state === 'unreachable'
+        ? state
+        : undefined
+    },
+  })
+  ctx.effect(() => () => { watch.stop() }, 'aishell-credentials: credential watch teardown')
+
+  // A save or a login brings a credential into being, and both end by
+  // rewriting the status document — so the store going from empty to full is
+  // what re-arms the watch. Nothing else would: the watch stops while nothing
+  // is stored, by design.
+  //
+  // `reset` rather than `arm`: the material being verified was just replaced,
+  // so an unreachable IAM from the previous pair says nothing about this one.
+  ctx.effect(() => {
+    let hadCredential = status.getSnapshot().hasAccessKey
+    return status.subscribe(() => {
+      const hasCredential = status.getSnapshot().hasAccessKey
+      if (hasCredential && !hadCredential) watch.reset()
+      hadCredential = hasCredential
+    })
+  }, 'aishell-credentials: credential watch re-arm')
+
+  // Coming back to a page whose status went stale while it was hidden is the
+  // other moment worth a check: the watch stopped when the page was hidden, and
+  // the person may be looking at an answer from before they left.
+  //
+  // `arm`, not `reset`: the credential did not change while they were away, so
+  // a backoff earned before the page was hidden still applies.
+  ctx.effect(() => {
+    const onVisibility = (): void => {
+      if (document.visibilityState === 'visible') watch.arm()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => { document.removeEventListener('visibilitychange', onVisibility) }
+  }, 'aishell-credentials: credential watch visibility')
 
   /**
    * Answer the request this form is open for, if any.

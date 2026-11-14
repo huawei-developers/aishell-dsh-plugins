@@ -168,11 +168,23 @@ export function CredentialRequestForm(props: CredentialRequestFormProps): ReactN
   const [loginWindowSeconds, setLoginWindowSeconds] = useState<number | undefined>(undefined)
 
   /**
-   * Whether a credential is stored, read live rather than captured.
+   * Whether this card should show the signed-in view.
    *
-   * Live because the card changes state under the person's hands: a successful
-   * save or login moves it to the signed-in view without a reopen, and a clear
-   * moves it back.
+   * The question the view answers is "is this account usable right now?", and a
+   * stored pair is only an answer to "is something stored?" — a credential IAM
+   * has stopped accepting stays in the store until someone checks it. The two
+   * diverge exactly when the card would otherwise lie: an expired STS token, or
+   * a key deleted in the console, leaves a signed-in view whose only two
+   * actions are "confirm" and "log out", neither of which fixes anything.
+   *
+   * `credentialsStored` is what the Host writes, and it is cleared by every path
+   * that learns the pair is unusable (`./credential-watch.ts` and the `auth`
+   * tool both go through `discard`). So this reads "stored, and not since
+   * found to be refused" — the state the store actually supports.
+   *
+   * Live rather than captured: the card changes under the person's hands, and a
+   * background check that clears the store must move this view without a
+   * reopen.
    */
   const signedIn = status.hasAccessKey || status.hasSecretKey
 

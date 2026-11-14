@@ -79,13 +79,41 @@ export type SharePreviewProps = PropsRuntime<'shell.overlay'> & PropsLocale<'ais
 
 export function SharePreview({ useShare, actions, t }: SharePreviewProps): ReactElement | null {
   const state = useShare((value: ShareState) => value)
+  // The card is the only thing this entry renders; everything transient about
+  // one showing of it lives in `OpenCard`, which mounts with the card and goes
+  // with it. That is what keeps the copy banner from outliving the link it was
+  // raised for.
+  if (!isOpen(state)) return null
+  return <OpenCard state={state} actions={actions} t={t} />
+}
+
+/**
+ * The card, while it is open.
+ *
+ * ## Why the transient state is here
+ *
+ * This component exists once per showing of the card, so state declared in it
+ * dies with the card. That is the property the copy banner needs: a `Toast`
+ * whose owner unmounts before it finishes does not call its `onDone` — it only
+ * clears its timer — so a flag held above this component would stay raised
+ * after the card closed, and the next card would open already showing "copied"
+ * for a link nobody had pressed.
+ *
+ * Cleaning up after the toast instead of relying on its callback would work
+ * too, and would be a rule to remember. Letting the state's lifetime be the
+ * card's lifetime makes it structural.
+ *
+ * @param props - the open state, the machine, and the translator.
+ */
+function OpenCard({ state, actions, t }: {
+  readonly state: ShareState
+  readonly actions: ShareMachine
+  readonly t: SharePreviewProps['t']
+}): ReactElement {
   // A sequence, not a boolean: `Toast` restarts its cycle when the owner mounts
-  // a new one, so two presses in a row must be two mounts. Kept outside the
-  // machine's state, which describes what the dialog shows rather than what
-  // floated over it for a moment.
+  // a new one, so two presses in a row must be two mounts.
   const [bannerSeq, setBannerSeq] = useState(0)
   const [bannerShown, setBannerShown] = useState(false)
-  if (!isOpen(state)) return null
 
   const raiseBanner = (): void => {
     setBannerSeq((seq) => seq + 1)

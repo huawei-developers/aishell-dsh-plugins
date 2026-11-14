@@ -69,6 +69,16 @@ let pendingResolvers: Array<(outcome: unknown) => void> = []
  */
 let releases: boolean[] = []
 let discards: boolean[] = []
+/**
+ * Every step that must happen in order, recorded as it happens.
+ *
+ * The discard and the form request are ordered against each other on purpose:
+ * the card reads the status document to decide which view to draw, so a form
+ * that opened before the discard's write landed would draw the signed-in view
+ * over an empty store. A shared log is what lets a test assert the order rather
+ * than each step's occurrence.
+ */
+let steps: string[] = []
 
 /**
  * Answer the oldest unanswered form.
@@ -101,6 +111,7 @@ function mount(store: MemoryBackend, hasTools: boolean = true): void {
   }
   registerAuthTool(ctx as never, store, {
     requestForm: (sessionId) => {
+      steps.push('form')
       formRequests.push(sessionId)
       let settle: (outcome: unknown) => void = () => {}
       const outcome = new Promise((resolve) => { settle = resolve as never })
@@ -111,8 +122,13 @@ function mount(store: MemoryBackend, hasTools: boolean = true): void {
     // shared request back. Recorded so a test can assert the release happened.
     releaseForm: () => { releases.push(true) },
     // A refused credential is cleared before the form opens, so the form asks
-    // for a pair instead of showing one that cannot work.
-    discard: () => { discards.push(true) },
+    // for a pair instead of showing one that cannot work. Resolves as the host
+    // does: only once the status document holds the cleared state.
+    discard: () => {
+      steps.push('discard')
+      discards.push(true)
+      return Promise.resolve()
+    },
   })
 }
 
@@ -129,6 +145,7 @@ beforeEach(() => {
   pendingResolvers = []
   releases = []
   discards = []
+  steps = []
   verifiedWith = undefined
   verdict = {
     ok: true,
@@ -250,7 +267,11 @@ describe('auth tool — verification', () => {
     await new Promise(resolve => setTimeout(resolve, 10))
 
     expect(discards).toHaveLength(1)
-    // And the form is up: the person is being asked, not shown.
+    // The form is up: the person is being asked, not shown. And the discard
+    // settled first — the card reads the status document to pick its view, so
+    // opening before that write landed would draw the signed-in card over the
+    // store the discard just emptied.
+    expect(steps).toEqual(['discard', 'form'])
     expect(formRequests).toEqual(['session-1'])
 
     answerForm('cancelled')

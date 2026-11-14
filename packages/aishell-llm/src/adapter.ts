@@ -16,6 +16,7 @@ import {
   resolveRetryPolicy,
 } from '@deepseek-ai/dsh-llm'
 import type {
+  BuiltinLlmFailureCode,
   GenerateOptions,
   LlmModelInfo,
   LlmProviderInfo,
@@ -69,10 +70,11 @@ const RETRY_MAX_DELAY_MS = 16_000
  * error and a timeout say nothing about the request, and `EMPTY_RESPONSE` is
  * documented as safe to repeat because the attempt left nothing durable.
  *
- * Absent on purpose: `PROVIDER_ERROR` (a 4xx that is not a rate limit is a
- * statement about the request — a bad model id, a malformed body — and
- * repeating it returns the same answer), and `MISSING_CREDENTIAL` /
- * `INVALID_CREDENTIAL` (a retry cannot conjure a credential).
+ * Absent on purpose: the unclassified 4xx codes (`` `HTTP_${status}` `` — a 4xx
+ * that is not a rate limit is a statement about the request, a bad model id or
+ * a malformed body, and repeating it returns the same answer), and
+ * `MISSING_CREDENTIAL` / `INVALID_CREDENTIAL` (a retry cannot conjure a
+ * credential).
  */
 const RETRYABLE_CODES = ['RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT', 'EMPTY_RESPONSE'] as const
 
@@ -155,21 +157,26 @@ function isModelNotFound(text: string): boolean {
  *     succeed.
  *   - `408` — `TIMEOUT`. The gateway timed out waiting; nothing about the
  *     request is wrong.
- *   - everything else — `PROVIDER_ERROR`. A 4xx that is not a rate limit is a
- *     statement about the request itself (a bad model id, a malformed body, a
- *     rejected credential), and repeating it produces the same answer.
+ *   - everything else — `` `HTTP_${status}` ``. A 4xx that is not a rate limit
+ *     is a statement about the request itself (a bad model id, a malformed
+ *     body, a rejected credential), and repeating it produces the same answer.
  *
- * `PROVIDER_ERROR` is not in the default retryable set, which is exactly the
- * intent: refusing to retry a request the provider already said was wrong.
+ * `` `HTTP_${status}` `` is the harness's own spelling for exactly this case —
+ * `BuiltinLlmFailureCode` admits it alongside the named codes — and it is what
+ * the shipped adapters raise for a non-2xx they cannot classify further. It is
+ * not in the default retryable set, which is exactly the intent: refusing to
+ * retry a request the provider already said was wrong. Naming the status rather
+ * than folding every 4xx into one code keeps two different rejections apart in
+ * a log.
  *
  * @param status - the HTTP status of the rejected request.
  * @returns the code to carry on the `LlmError`.
  */
-function classifyHttpFailure(status: number): string {
+function classifyHttpFailure(status: number): BuiltinLlmFailureCode {
   if (status === 429) return 'RATE_LIMIT'
   if (status === 408) return 'TIMEOUT'
   if (status >= 500 && status <= 599) return 'SERVER'
-  return 'PROVIDER_ERROR'
+  return `HTTP_${status}`
 }
 
 /**
@@ -208,9 +215,8 @@ export class GatewayAdapter extends LlmAdapter {
    * The executor (`@deepseek-ai/dsh-llm-retry`, mounted by `dsh-base`) retries
    * whatever a provider's policy says to retry, and it reads the policy from
    * the provider registration. Declaring it here is what lets a 429 on this
-   * gateway be retried without retrying a 401 — the previous code reported
-   * every non-2xx as `PROVIDER_ERROR`, which put nothing in the retryable set
-   * and so retried nothing.
+   * gateway be retried without retrying a 401: the policy names specific
+   * codes, so the classification below has to keep them apart.
    *
    * ## The shape
    *
@@ -224,11 +230,11 @@ export class GatewayAdapter extends LlmAdapter {
    * the chat UI renders is the scheduled delay — jitter would make it disagree
    * with the number the user is told.
    *
-   * Eligible codes are the transient ones. `PROVIDER_ERROR` is deliberately
-   * absent: a 4xx that is not a rate limit is a statement about the request,
-   * and repeating it produces the same answer. `EMPTY_RESPONSE` is included
-   * because the harness documents it as safe to repeat — the attempt produced
-   * nothing durable.
+   * Eligible codes are the transient ones. The unclassified 4xx codes are
+   * deliberately absent: a 4xx that is not a rate limit is a statement about
+   * the request, and repeating it produces the same answer. `EMPTY_RESPONSE`
+   * is included because the harness documents it as safe to repeat — the
+   * attempt produced nothing durable.
    */
   override providerRetryPolicy(_provider: string): ResolvedRetryPolicy {
     return resolveRetryPolicy({

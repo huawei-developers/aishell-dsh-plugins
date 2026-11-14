@@ -3,9 +3,10 @@
  *
  * Two facts have to hold together for a 429 to be retried at all:
  *
- *   1. The adapter reports a rate limit with the code the policy names. It
- *      used to report every non-2xx as `PROVIDER_ERROR`, which is not in the
- *      retryable set — so the executor had nothing to act on.
+ *   1. The adapter reports a rate limit with the code the policy names. A
+ *      route that reported every non-2xx as one undifferentiated code would
+ *      leave nothing in the retryable set — the executor would have nothing to
+ *      act on.
  *   2. The policy actually lists that code, with a bounded ladder.
  *
  * Either alone does nothing. These pin both, and the ladder the user sees:
@@ -65,7 +66,7 @@ describe('retry policy', () => {
     )
     // A 4xx that is not a rate limit says the request itself is wrong; a retry
     // returns the same rejection. A retry cannot conjure a credential either.
-    expect(policy.retryableCodes).not.toContain('PROVIDER_ERROR')
+    expect(policy.retryableCodes).not.toContain('HTTP_400')
     expect(policy.retryableCodes).not.toContain('MISSING_CREDENTIAL')
     expect(policy.retryableCodes).not.toContain('INVALID_CREDENTIAL')
   })
@@ -116,12 +117,14 @@ describe('HTTP failure classification', () => {
     expect(await codeFor(408)).toBe('TIMEOUT')
   })
 
-  it('reports other 4xx as PROVIDER_ERROR, which the policy does not retry', async () => {
+  it('reports other 4xx as the status-named code, which the policy does not retry', async () => {
     // The direction that matters: a bad model id or a malformed body must not
-    // cost five more identical requests.
-    expect(await codeFor(400)).toBe('PROVIDER_ERROR')
-    expect(await codeFor(401)).toBe('PROVIDER_ERROR')
-    expect(await codeFor(404)).toBe('PROVIDER_ERROR')
+    // cost five more identical requests. `` `HTTP_${status}` `` is the harness's
+    // own spelling for an unclassified provider answer, and naming the status
+    // keeps two different rejections apart in a log.
+    expect(await codeFor(400)).toBe('HTTP_400')
+    expect(await codeFor(401)).toBe('HTTP_401')
+    expect(await codeFor(404)).toBe('HTTP_404')
   })
 
   it('reports a failed round trip as TRANSPORT, which the policy retries', async () => {

@@ -313,7 +313,7 @@ describe('GatewayAdapter — stream', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('throws PROVIDER_ERROR on non-ok response', async () => {
+  it('throws a status-named code on non-ok response', async () => {
     const adapter = makeAdapter()
     fetchMock.mockResolvedValueOnce({ ok: false, status: 403, text: async () => 'forbidden' })
     await expect(adapter.stream(baseOptions)[Symbol.asyncIterator]().next()).rejects.toThrow('gateway returned 403')

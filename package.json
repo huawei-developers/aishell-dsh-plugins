@@ -26,7 +26,7 @@
     "build-permission-registry": "node --experimental-strip-types scripts/build-permission-registry.ts"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/cordis": "^4.1.0",
     "@types/node": "^22.10.0",
     "@vitest/coverage-v8": "^2.1.0",
     "lefthook": "^1.10.0",

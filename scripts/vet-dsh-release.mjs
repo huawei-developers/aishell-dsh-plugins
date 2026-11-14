@@ -5,11 +5,13 @@
  * ## Why this is a script
  *
  * Each plugin package lists the `@deepseek-ai/dsh-*` versions it has been vetted
- * against, as an explicit `A || B || C` enumeration in both `peerDependencies`
- * and `devDependencies`. That is the right shape — npm cannot express "any
- * prerelease of 0.2.x", and an open range would let an unvetted build install
- * silently — but it means one new release has to be appended in eight manifests
- * across two dependency blocks each, for every `dsh-*` package.
+ * against, as an explicit `A || B || C` enumeration in every dependency block
+ * it uses — `peerDependencies`, `devDependencies`, and `dependencies` for the
+ * packages that ship a DSH package on the Node half. That is the right shape —
+ * npm cannot express "any prerelease of 0.2.x", and an open range would let an
+ * unvetted build install silently — but it means one new release has to be
+ * appended across ten manifests and three dependent blocks each, for every
+ * `dsh-*` package.
  *
  * Doing that by hand is how a range ends up inconsistent between packages: one
  * of them keeps the old tail, and the plugin that needed upgrading is the one
@@ -35,8 +37,17 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url))
 /** The packages whose manifests carry the range. */
 const PACKAGES = join(ROOT, 'packages')
 
-/** The dependency fields a range appears in. */
-const FIELDS = ['peerDependencies', 'devDependencies']
+/**
+ * The dependency fields a range appears in.
+ *
+ * `dependencies` is included because some plugins ship a DSH package on the
+ * Node half — `dsh-client-store` is a real runtime dependency of the
+ * credentials and share packages — so a release added only to the peer and dev
+ * blocks would leave those two behind. pnpm resolves each importer from its own
+ * field, so a stale range there pins that importer to the old release while the
+ * rest of the workspace moves.
+ */
+const FIELDS = ['dependencies', 'peerDependencies', 'devDependencies']
 
 const version = process.argv[2]
 if (version === undefined || !/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) {

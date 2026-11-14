@@ -103,7 +103,7 @@ published — only the tag is behind — so name the version once and the warnin
 disappear:
 
 ```sh
-npm install @deepseek-ai/dsh-base@0.2.1-rc.2
+npm install @deepseek-ai/dsh-base@0.2.2-rc.3
 ```
 
 This is a statement about the upstream tags, not about these packages: nothing
@@ -154,8 +154,11 @@ Use `--tag beta` while the version is a prerelease, so it does not become
 
 DSH is in developer preview — APIs may break between releases. Every plugin
 package declares its `@deepseek-ai/dsh-*` compatibility range in its own
-`peerDependencies`, and that manifest is the single source: listing the range
-here as well is a second copy that goes stale the moment a release is vetted.
+manifest, and that manifest is the single source: listing the range here as well
+is a second copy that goes stale the moment a release is vetted. The range lives
+in `peerDependencies` for host-provided packages, in `devDependencies` for the
+ones only the build needs, and in `dependencies` for the Node-side packages a
+plugin ships at runtime.
 
 To see what a package supports:
 
@@ -167,7 +170,7 @@ To add a release to the supported set, extend every range that currently ends at
 the previous one:
 
 ```sh
-node scripts/vet-dsh-release.mjs 0.2.2-rc.1
+node scripts/vet-dsh-release.mjs 0.2.2-rc.3
 ```
 
 When upgrading DSH, run `pnpm run typecheck` to catch API changes.

@@ -30,6 +30,7 @@ import { readSharePath, SESSION_KIND } from '../route.ts'
 import { SHARE_CLIENT_ROUTE } from '../route.ts'
 import { writeClipboard } from '@deepseek-ai/dsh-client-ui-primitives'
 import { createShareMachine, type ShareDriver } from './machine.ts'
+import { openSessionAfterRefresh } from './open-session.ts'
 import { installDialStyles } from './dial.ts'
 import { installDialogStyles } from './styles.ts'
 import { ShareMessageAction, type ShareMessageActionInjected } from './ShareMessageAction.tsx'
@@ -39,6 +40,7 @@ import { NS, zh, en } from './locales.ts'
 
 export { advance, beginImport, beginShare, CLOSED, isOpen, type ShareState } from './state.ts'
 export { createShareMachine, type ShareDriver, type ShareMachine } from './machine.ts'
+export { openSessionAfterRefresh, type OpenSessionDeps } from './open-session.ts'
 
 export const name = 'aishell-share'
 
@@ -136,7 +138,26 @@ export function apply(ctx: ClientContext): void {
       // The copy is a stored session, so this is the ordinary navigation the
       // sidebar performs when a row is clicked.
       const ui = ctx.get('uiWorkspace') as { openSession: (id: string) => void } | undefined
-      ui?.openSession(sessionId)
+      // The session is newer than this client's list snapshot, and navigation
+      // resolves ids against that snapshot. See `./open-session.ts` for why the
+      // pull has to land first and why a failed one still opens.
+      const sessions = ctx.get('sessions') as { refresh: () => Promise<void> } | undefined
+      void openSessionAfterRefresh(sessionId, {
+        refresh: sessions === undefined
+          ? () => Promise.resolve()
+          : () => sessions.refresh(),
+        // A shell without the workspace service cannot navigate at all. Thrown
+        // rather than skipped so it reaches `onOpenFailed` with the others: an
+        // import that stored the session and then did nothing is the outcome
+        // this whole path exists to make visible.
+        open: (id) => {
+          if (ui === undefined) throw new Error('the shell offers no workspace navigation')
+          ui.openSession(id)
+        },
+        onOpenFailed: (error, id) => {
+          ctx.logger(name).warn(`could not open imported session ${id}: ${String(error)}`)
+        },
+      })
     },
   }
 

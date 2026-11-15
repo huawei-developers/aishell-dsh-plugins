@@ -1,7 +1,7 @@
 {
   "name": "@huaweidevtools/aishell-dsh-qr",
   "description": "Renders short text as a scannable QR-code PNG in the conversation working directory, so a link meant for a phone can be shown on screen",
-  "version": "0.0.25",
+  "version": "0.0.26",
   "publishConfig": {
     "access": "public"
   },
@@ -39,15 +39,15 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.1.0",
-    "@deepseek-ai/dsh-tools": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
-    "@deepseek-ai/dsh-fs": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3"
+    "@deepseek-ai/dsh-fs": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.1.0",
+    "@deepseek-ai/dsh-fs": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
     "@deepseek-ai/dsh-tools": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
     "@types/node": "^22.10.0",
     "tsdown": "^0.10.0",
-    "typescript": "^5.7.0",
-    "@deepseek-ai/dsh-fs": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3"
+    "typescript": "^5.7.0"
   }
 }

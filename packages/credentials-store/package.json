@@ -1,7 +1,7 @@
 {
   "name": "@huaweidevtools/aishell-dsh-credentials-store",
   "description": "Credential storage + SDK-HMAC-SHA256 signing for aishell DSH plugins",
-  "version": "0.0.26",
+  "version": "0.0.27",
   "publishConfig": {
     "access": "public"
   },

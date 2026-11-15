@@ -48,8 +48,8 @@ export function apply(ctx: Context): void {
       description:
         'Render text as a QR code and write it into the working directory as a PNG. '
         + 'Returns the relative path to reference with ![alt](path.png) in a reply. '
-        + 'Use it when the user has to scan something from a phone — a recharge or '
-        + 'login link, a Wi-Fi credential — rather than read it on this screen.',
+        + 'Use it when the text has to be handed to another device by scanning — a link, '
+        + 'a Wi-Fi credential, a short code — rather than read on this screen.',
       parameters: QR_PARAMETERS,
       output: {
         schema: QR_OUTPUT_SCHEMA,

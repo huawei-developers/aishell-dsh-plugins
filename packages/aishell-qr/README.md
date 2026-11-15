@@ -1,9 +1,9 @@
 # @huaweidevtools/aishell-dsh-qr
 
 Renders short text as a scannable QR code and writes it into the conversation's
-working directory, so a link meant for a phone can be shown on the screen the
-conversation is reading from. One host-only tool; no browser half, no network
-access, no credential.
+working directory, so text that has to reach another device by scanning can be
+shown on the screen the conversation is reading from. One host-only tool; no
+browser half, no network access, no credential.
 
 ## A tool, not an instruction
 

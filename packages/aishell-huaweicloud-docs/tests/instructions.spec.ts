@@ -210,6 +210,9 @@ describe('aishell-huaweicloud-docs', () => {
     // code), and the URL stays visible for a reader who cannot scan.
     expect(DOCS_POINTER).toMatch(/QR code/)
     expect(DOCS_POINTER).toMatch(/selectable text/)
+    // The section states what to show, not where the user is standing: which
+    // device a person recharges from is theirs to decide.
+    expect(DOCS_POINTER).not.toMatch(/phone|mobile|手机/i)
     // And the decoupling: this package states what the user needs, not how
     // another plugin produces it. A tool name, a file name or an encoder
     // command here would make the two packages' texts depend on each other.

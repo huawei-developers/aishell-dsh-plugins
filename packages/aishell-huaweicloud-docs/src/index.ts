@@ -118,7 +118,7 @@ When a user needs to top up a Huawei Cloud account, or asks for the recharge pag
 
 ${RECHARGE_URL}
 
-**Show it as a QR code, and put the URL underneath as selectable text.** Recharging is done on the phone the user is holding, while the conversation runs on a different machine — a link they cannot click from here is not an answer, and a code they have to squint at is a poor second one.
+**Show it as a QR code, with the URL underneath as selectable text.** A code can be scanned from another device; the URL is what remains readable when it cannot be.
 
 Two facts decide whether the account can recharge at all, and both live in the billing documentation — <${BILLING_INDEX_URL}>, entry 账户充值: the account must be real-name verified first, and the payment channels depend on the contracting entity. Read that entry rather than answering from memory.`
 

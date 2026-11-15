@@ -57,12 +57,25 @@ describe('permissionPolicyText — what is announced', () => {
     expect(READ_ONLY_POLICY).toContain('EIP')
     expect(READ_ONLY_POLICY).toContain('tunnel')
     expect(READ_ONLY_POLICY).toMatch(/does not make the change allowed/)
+    // The route paragraph names the account, not "anything reachable".
+    expect(READ_ONLY_POLICY).toMatch(/still this account reached another way/)
   })
 
-  it('keeps local work out of scope, so a review is not declined', () => {
-    // "Read-only" is not "touch nothing": files and local processes are not
-    // cloud state, and a model that conflates them stops work it should do.
-    expect(READ_ONLY_POLICY).toMatch(/Local work is unaffected/)
+  it('scopes the switch to one account, not to everything reachable', () => {
+    // The failure this guards: a restriction stated without its boundary is
+    // read as a blanket ban, and the model then declines work the switch never
+    // governed — local files, containers, another cloud.
+    expect(READ_ONLY_POLICY).toMatch(/governs this account and nothing else/)
+    expect(READ_ONLY_POLICY).toMatch(/not a sandbox/)
+    expect(READ_ONLY_POLICY).toMatch(/not a global read-only posture/)
+  })
+
+  it('names the work outside the account, so a review is not declined', () => {
+    // Each is a class of work the gate cannot see and does not govern.
+    expect(READ_ONLY_POLICY).toMatch(/local files and processes/)
+    expect(READ_ONLY_POLICY).toMatch(/containers/)
+    expect(READ_ONLY_POLICY).toMatch(/other cloud accounts/)
+    expect(READ_ONLY_POLICY).toMatch(/Work there as you normally would/)
   })
 })
 

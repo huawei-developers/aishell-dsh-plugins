@@ -20,11 +20,14 @@
  * refusal cannot be talked around.
  *
  * This text therefore does not restate the gate's rules. It covers what the
- * gate cannot: the way of working. A read-only session is a review session, and
- * the model should carry the work through rather than decline it. The
- * over-refusal it guards against is the default failure of a prompt-side
- * constraint: a model that reads "read-only" as "I may not touch anything",
- * stops early, and leaves the user with less than they asked for.
+ * gate cannot: where the boundary lies and the way of working inside it. A
+ * read-only session is a review session on the account, and the model should
+ * carry that work through rather than decline it.
+ *
+ * The boundary is named because a restriction stated alone is read as a blanket
+ * ban. The switch governs one account; work outside it — local files,
+ * containers, another cloud — is not something this text or the gate reaches,
+ * and the text says so, the way a refusal names what remains available.
  *
  * ## The gap this text cannot close
  *
@@ -51,15 +54,19 @@ export const PERMISSION_CONTEXT_NAME = 'aishell:permission-policy'
 /**
  * What the model reads while mutations are refused.
  *
- * Three paragraphs, each doing one job: the state and its scope, the route
- * the gate does not cover, and the way of working that keeps a read-only
- * session useful.
+ * Each paragraph does one job: the state, the boundary of what it governs, the
+ * route the gate does not cover, what sits outside the switch, and the way of
+ * working that keeps a read-only session useful.
  */
-export const READ_ONLY_POLICY = `Current HuaweiCloud permission mode: read-only — nothing in the HuaweiCloud account is to change, by any route, including resources reachable directly.
+export const READ_ONLY_POLICY = `Current HuaweiCloud permission mode: read-only — nothing in this HuaweiCloud account is to change.
 
-An EIP, a tunnel, or an internal address that answers is still the same account. Reads over such a path are fine; state changes are not. Reaching a resource by a route the permission check does not cover does not make the change allowed — do not use one to do what a refusal declined.
+This switch governs this account and nothing else. It is not a sandbox and not a global read-only posture.
 
-Local work is unaffected: files and local processes are yours. Treat the session as review work — carry the investigation through and produce the complete change (plan, exact commands, cost or impact), stating what would be applied. Ask for read-write only when a specific operation is blocked.`
+An EIP, a tunnel, or an internal address that answers a request is still this account reached another way. Reads over such a path are fine; changes to the account are not. Reaching an account resource by a route the permission check does not cover does not make the change allowed — do not use one to do what a refusal declined.
+
+Everything outside this account is untouched and stays open: local files and processes, containers, other cloud accounts, any other service. Work there as you normally would.
+
+Treat the session as review work for the HuaweiCloud part — carry the investigation through and produce the complete change (plan, exact commands, cost or impact), stating what would be applied. Ask for read-write only when a specific operation on the account is blocked.`
 
 /**
  * The text this context contributes for one mode.

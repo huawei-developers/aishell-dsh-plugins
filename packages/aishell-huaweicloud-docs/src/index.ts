@@ -61,8 +61,44 @@ export const HUAWEICLOUD_DOCS_ORDER = 100
 /** Name this contribution registers under; unique across the assembled prompt. */
 export const DOCS_SECTION_NAME = 'aishell:huaweicloud-docs'
 
+/** Root the documentation site is served from. */
+const DOCS_ORIGIN = 'https://support.huaweicloud.com'
+
+/**
+ * One product's documentation index.
+ *
+ * The site's top-level index names each product's `llms.txt` as a path off the
+ * same origin, so a product page is derived rather than written out again.
+ *
+ * @param product - the product path segment, as the index spells it.
+ * @returns that product's documentation index.
+ */
+export const productIndexUrl = (product: string): string => `${DOCS_ORIGIN}/${product}/llms.txt`
+
 /** The Huawei Cloud documentation index. */
-export const DOCS_INDEX_URL = 'https://support.huaweicloud.com/llms.txt'
+export const DOCS_INDEX_URL = `${DOCS_ORIGIN}/llms.txt`
+
+/** The billing documentation index, which carries the recharge entry. */
+export const BILLING_INDEX_URL = productIndexUrl('billing')
+
+/**
+ * The Huawei Cloud account recharge page.
+ *
+ * Measured rather than quoted: the billing documentation says "the 总览 page or
+ * the 充值 page" without giving either address, and no address is guessable
+ * from the others.
+ *
+ * `account.huaweicloud.com` rather than `console.huaweicloud.com`: the recharge
+ * route lives in the account user center. The `#/userindex/balanceRecharge`
+ * fragment is the route itself — a URL without it opens the user center's
+ * default page, and a fragment never reaches the server, so it survives as
+ * long as the client-side router keeps the name.
+ *
+ * `region` is context only. A balance is account-wide, not per region, so the
+ * value is what the console itself puts in the link, not a choice.
+ */
+export const RECHARGE_URL =
+  'https://account.huaweicloud.com/usercenter/?region=cn-north-4#/userindex/balanceRecharge'
 
 /**
  * What the model reads.
@@ -74,7 +110,17 @@ export const DOCS_INDEX_URL = 'https://support.huaweicloud.com/llms.txt'
  */
 export const DOCS_POINTER = `Huawei Cloud product documentation — for what a product is, what it supports, its quotas and limits, or its billing model — is indexed at ${DOCS_INDEX_URL}
 
-That index lists every Huawei Cloud product by category, each entry naming the product's own llms.txt. Read it to find the product, then read that product's file for the detail. Do not answer questions about a product's capabilities or limits from memory; they change between releases, and the documentation is the authority.`
+That index lists every Huawei Cloud product by category, each entry naming the product's own llms.txt. Read it to find the product, then read that product's file for the detail. Do not answer questions about a product's capabilities or limits from memory; they change between releases, and the documentation is the authority.
+
+## Account recharge
+
+When a user needs to top up a Huawei Cloud account, or asks for the recharge page, the page is at a fixed address:
+
+${RECHARGE_URL}
+
+**Show it as a QR code, and put the URL underneath as selectable text.** Recharging is done on the phone the user is holding, while the conversation runs on a different machine — a link they cannot click from here is not an answer, and a code they have to squint at is a poor second one.
+
+Two facts decide whether the account can recharge at all, and both live in the billing documentation — <${BILLING_INDEX_URL}>, entry 账户充值: the account must be real-name verified first, and the payment channels depend on the contracting entity. Read that entry rather than answering from memory.`
 
 /**
  * Register the documentation pointer.

@@ -1,0 +1,10 @@
+# aishell-qr bundle patch: inserts the QR-code tool.
+# Install standalone: `dsh plugin --profile <name> add @huaweidevtools/aishell-dsh-qr`
+#
+# One host-only row: it registers a single tool that writes a PNG QR code into
+# the conversation's working directory and answers with the relative path a
+# reply references. Nothing here reaches a cloud service, holds a credential,
+# reads a network, or has a browser half.
+- insert:
+    - id: aishell-qr
+      name: '@huaweidevtools/aishell-dsh-qr'

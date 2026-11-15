@@ -196,4 +196,40 @@ describe('aishell-huaweicloud-docs', () => {
     // And the authority claim, which is what stops an answer from memory.
     expect(DOCS_POINTER).toMatch(/documentation is the authority/i)
   })
+
+  it('gives the recharge page address', () => {
+    // The billing documentation says "the 总览 page or the 充值 page" without
+    // giving either address, so the address has to be carried here or the model
+    // guesses one.
+    expect(DOCS_POINTER).toContain('account.huaweicloud.com')
+    expect(DOCS_POINTER).toContain('balanceRecharge')
+  })
+
+  it('asks for a QR code and the URL together, without naming how either is made', () => {
+    // Two claims in one: the page is meant to be scanned (so the reply shows a
+    // code), and the URL stays visible for a reader who cannot scan.
+    expect(DOCS_POINTER).toMatch(/QR code/)
+    expect(DOCS_POINTER).toMatch(/selectable text/)
+    // And the decoupling: this package states what the user needs, not how
+    // another plugin produces it. A tool name, a file name or an encoder
+    // command here would make the two packages' texts depend on each other.
+    expect(DOCS_POINTER).not.toMatch(/aishell__qr/)
+    expect(DOCS_POINTER).not.toMatch(/qrencode|zbarimg/)
+    expect(DOCS_POINTER).not.toMatch(/relativePath/)
+    expect(DOCS_POINTER).not.toMatch(/\.png/)
+    // And no fallback either: telling the model to improvise when no tool is
+    // present invites it to write a script or install an encoder, which is the
+    // silent-unscannable-code failure the tool exists to prevent.
+    expect(DOCS_POINTER).not.toMatch(/if it does not|install|script/i)
+  })
+
+  it('points at the billing documentation for the preconditions', () => {
+    // Whether an account may recharge depends on real-name verification and the
+    // contracting entity — facts that move, so the entry is named rather than
+    // restated. The address is derived from the site origin, so it appears here
+    // as rendered rather than as a second literal.
+    expect(DOCS_POINTER).toContain('support.huaweicloud.com/billing/llms.txt')
+    expect(DOCS_POINTER).toMatch(/real-name verified/)
+    expect(DOCS_POINTER).toMatch(/from memory/)
+  })
 })

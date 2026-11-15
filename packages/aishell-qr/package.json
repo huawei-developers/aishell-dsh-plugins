@@ -1,0 +1,53 @@
+{
+  "name": "@huaweidevtools/aishell-dsh-qr",
+  "description": "Renders short text as a scannable QR-code PNG in the conversation working directory, so a link meant for a phone can be shown on screen",
+  "version": "0.0.25",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yusheng-g/aishell-dsh-plugins.git",
+    "directory": "packages/aishell-qr"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "build:bundle": "tsdown",
+    "prepublishOnly": "node ../../scripts/check-packages.mjs --prepublish --only aishell-qr"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/types/**/*.d.ts",
+    "cordis.patch.yml"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "qrcode-generator": "2.0.4"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.1.0",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
+    "@deepseek-ai/dsh-fs": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.1.0",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
+    "@types/node": "^22.10.0",
+    "tsdown": "^0.10.0",
+    "typescript": "^5.7.0",
+    "@deepseek-ai/dsh-fs": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3"
+  }
+}

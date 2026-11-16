@@ -6,7 +6,7 @@ DSH (DeepSeek Harness) plugin packages for Huawei Cloud AI Shell.
 
 This repository hosts plugin packages that extend [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) — an all-plugin Cordis agent harness. Each plugin package contributes tools, capability providers, commands, or profile bundles to the DSH runtime.
 
-For the full DSH architecture and plugin authoring reference, see [docs/deepseek-harness-0.2.x.md](docs/deepseek-harness-0.2.x.md).
+For the full DSH architecture and plugin authoring reference, see [docs/deepseek-harness-0.2.x.md](docs/deepseek-harness-0.2.x.md). For where the plugin set is heading, see [docs/roadmap.md](docs/roadmap.md).
 
 ## Repository layout
 
@@ -22,6 +22,9 @@ aishell-dsh-plugins/
 │       ├── tests/          *.spec.ts behavior tests
 │       └── README.md       Package API and extension points
 ├── docs/                  Developer documentation
+│   ├── deepseek-harness-0.2.x.md   DSH plugin model and authoring manual
+│   ├── design/            How a feature is built, and why
+│   └── roadmap.md         What the plugin set is heading toward
 ├── scripts/               Repo tooling (aggregate, version bump, pack check, commit-msg hook)
 ├── package.json           Root workspace manifest
 ├── pnpm-workspace.yaml    Workspace: packages/*

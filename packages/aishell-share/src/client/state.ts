@@ -29,6 +29,24 @@ export type ShareState =
   /** Nothing open. */
   | { readonly kind: 'closed' }
   /**
+   * Importing: no link yet, and the reader is typing one.
+   *
+   * The incoming-link flow starts from a URL the shell already has, so
+   * `fetching` is its first state. A reader who starts from a Workspace's menu
+   * has no URL at all — the link is what they came to paste — and a dialog that
+   * opened on `fetching` would be fetching nothing.
+   */
+  | {
+    readonly kind: 'enter-link'
+    /**
+     * Where the copy will land, when the caller already knows.
+     *
+     * A Workspace menu names its Workspace, so the import skips the directory
+     * question. Absent for a dialog opened without a context that picks one.
+     */
+    readonly presetCwd?: string
+  }
+  /**
    * Sharing: before anything leaves the machine.
    *
    * `messageId` is present when the reader started from a message's action row;
@@ -55,14 +73,31 @@ export type ShareState =
    */
   | { readonly kind: 'shared', readonly url: string }
   /** Importing: the package is being fetched. */
-  | { readonly kind: 'fetching', readonly link: string }
+  | {
+    readonly kind: 'fetching'
+    readonly link: string
+    /** Where the copy lands, when the caller named it before the fetch. */
+    readonly presetCwd?: string
+  }
   /**
    * Importing: the conversation, before anything is written.
    *
    * The link is gone from here on: everything after this point acts on the
    * package in hand, so nothing downstream needs to name the URL again.
    */
-  | { readonly kind: 'preview', readonly session: SharePackage }
+  | {
+    readonly kind: 'preview'
+    readonly session: SharePackage
+    /**
+     * The directory the copy goes to, when the caller already named one.
+     *
+     * Set when the import started from a Workspace's menu: that Workspace is
+     * the reader's answer to "where should this land", and asking again would
+     * be asking them to repeat themselves. Absent for an incoming link, which
+     * arrives with no such context.
+     */
+    readonly presetCwd?: string
+  }
   /**
    * Importing: picking where the copy lands.
    *
@@ -111,10 +146,22 @@ export function beginShare(sessionId: string, messageId?: string): ShareState {
  * every step acts on the package, so the URL has no further use.
  *
  * @param link - the `aishell://share/...` URL as delivered.
+ * @param presetCwd - where the copy lands, when the caller already knows.
+ *   Carried through to the preview so the directory question can be skipped.
  * @returns the fetching state.
  */
-export function beginImport(link: string): ShareState {
-  return { kind: 'fetching', link }
+export function beginImport(link: string, presetCwd?: string): ShareState {
+  return { kind: 'fetching', link, ...presetCwd === undefined ? {} : { presetCwd } }
+}
+
+/**
+ * Open the dialog with no link yet.
+ *
+ * @param presetCwd - where the copy lands, when the caller already knows.
+ * @returns the state that shows the link field.
+ */
+export function beginLinkEntry(presetCwd?: string): ShareState {
+  return { kind: 'enter-link', ...presetCwd === undefined ? {} : { presetCwd } }
 }
 
 /**
@@ -151,9 +198,15 @@ export function advance(
         : state
 
     case 'fetched':
-      return state.kind === 'fetching'
-        ? { kind: 'preview', session: event.session }
-        : state
+      if (state.kind !== 'fetching') return state
+      // The preset travels with the package: the preview is the state that
+      // decides whether to ask for a directory, so it is the state that has to
+      // know one was already named.
+      return {
+        kind: 'preview',
+        session: event.session,
+        ...state.presetCwd === undefined ? {} : { presetCwd: state.presetCwd },
+      }
 
     case 'choose':
       return state.kind === 'preview'
@@ -170,14 +223,47 @@ export function advance(
       return state.kind === 'importing' ? CLOSED : state
 
     case 'failed': {
-      if (state.kind === 'closed' || state.kind === 'failed') return state
-      const stage = isSharing(state) ? 'share' : 'import'
-      return { kind: 'failed', stage, reason: event.reason }
+      // The two states `flowOf` leaves undefined are exactly the two this
+      // branch does not reach, so the answer is always one of the flows. The
+      // fallback stays explicit rather than asserted: a cast here would keep
+      // compiling if a new state were added with no flow.
+      const flow = state.kind === 'closed' || state.kind === 'failed' ? undefined : flowOf(state)
+      return flow === undefined ? state : { kind: 'failed', stage: flow, reason: event.reason }
     }
   }
 }
 
-/** Whether a state belongs to the sharing flow. */
-function isSharing(state: ShareState): boolean {
-  return state.kind === 'confirm-share' || state.kind === 'sharing' || state.kind === 'shared'
+/** The two flows the one dialog serves. */
+export type Flow = 'share' | 'import'
+
+/**
+ * Which flow a state belongs to.
+ *
+ * The dialog is one surface with one button row, so the copy that names it —
+ * the card's title — has to come from the state rather than from whichever
+ * entry point opened it. A reader who asked to import should not be looking at
+ * a card headed "Share session".
+ *
+ * A failure belongs to the flow it happened in, not to the one the reader might
+ * have expected, so `failed` answers with its own `stage`.
+ *
+ * Every open state answers. `undefined` is `closed` alone: nothing is showing,
+ * so there is no flow to name.
+ *
+ * @param state - the state to classify.
+ * @returns the flow, or undefined while nothing is open.
+ */
+export function flowOf(state: ShareState): Flow | undefined {
+  switch (state.kind) {
+    case 'closed': return undefined
+    case 'failed': return state.stage
+    case 'confirm-share':
+    case 'sharing':
+    case 'shared': return 'share'
+    case 'enter-link':
+    case 'fetching':
+    case 'preview':
+    case 'choose-workspace':
+    case 'importing': return 'import'
+  }
 }

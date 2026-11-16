@@ -410,6 +410,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-chat':
         specifier: 0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3
         version: 0.2.2-rc.3(@deepseek-ai/cordis@4.1.0)
+      '@deepseek-ai/dsh-client-ui-context-menu':
+        specifier: 0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3
+        version: 0.2.2-rc.3(@deepseek-ai/cordis@4.1.0)
       '@deepseek-ai/dsh-client-ui-layout':
         specifier: 0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3
         version: 0.2.2-rc.3(@deepseek-ai/cordis@4.1.0)
@@ -816,6 +819,11 @@ packages:
 
   '@deepseek-ai/dsh-client-ui-chat@0.2.2-rc.3':
     resolution: {integrity: sha512-D5+Kh4XQ+BKTPt7brGaRaOX+GNyb0KZpshUcIH8Mj4wT4TRj1lpT32tupykc4uTgFwbRdW0TIjEdYsaqP1My5A==}
+    peerDependencies:
+      '@deepseek-ai/cordis': ~4.1.0
+
+  '@deepseek-ai/dsh-client-ui-context-menu@0.2.2-rc.3':
+    resolution: {integrity: sha512-ccVOg/6eMSncD3iPE2poZTc0ud/z4R5QtlX65yGlybp/fJEMGqMmx7919Ywz3ggnvBmzSNxNmqia0+EJn1E+tw==}
     peerDependencies:
       '@deepseek-ai/cordis': ~4.1.0
 
@@ -5433,6 +5441,10 @@ snapshots:
     dependencies:
       '@deepseek-ai/cordis': 4.1.0(@deepseek-ai/cordis-plugin-include@1.1.0)(@deepseek-ai/cordis-plugin-loader@1.1.0)
       '@deepseek-ai/schemastery': 3.19.0
+
+  '@deepseek-ai/dsh-client-ui-context-menu@0.2.2-rc.3(@deepseek-ai/cordis@4.1.0)':
+    dependencies:
+      '@deepseek-ai/cordis': 4.1.0(@deepseek-ai/cordis-plugin-include@1.1.0)(@deepseek-ai/cordis-plugin-loader@1.1.0)
 
   '@deepseek-ai/dsh-client-ui-conversation@0.2.2-rc.3(@deepseek-ai/cordis@4.1.0)':
     dependencies:

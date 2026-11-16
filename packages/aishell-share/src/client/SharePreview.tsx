@@ -46,7 +46,7 @@ import type { ShareMachine } from './machine.ts'
 import type { SharePackage } from '../package.ts'
 import type { ServiceFailure } from '../service.ts'
 import { previewLines, type PreviewLine } from './preview.ts'
-import { isOpen, type ShareState, type WorkspaceChoice } from './state.ts'
+import { isOpen, flowOf, type ShareState, type WorkspaceChoice } from './state.ts'
 import {
   BUBBLE_MINE_CLASS,
   BUBBLE_REPLY_CLASS,
@@ -115,6 +115,25 @@ function OpenCard({ state, actions, t }: {
   const [bannerSeq, setBannerSeq] = useState(0)
   const [bannerShown, setBannerShown] = useState(false)
 
+  // What the reader has typed into the link field. It lives here rather than in
+  // `LinkEntry` because the submit button is in the footer: the two are siblings
+  // under the card, and the field cannot tell the button whether it is ready.
+  // The value is not a step of the import — the machine learns it only when the
+  // form is submitted — so it stays out of the state machine.
+  //
+  // `submitLink` closes over this render's `state`, so it always carries the
+  // `presetCwd` the field was opened with; the form is only reachable while that
+  // state is showing.
+  const [link, setLink] = useState('')
+  const trimmed = link.trim()
+  const presetCwd = state.kind === 'enter-link' ? state.presetCwd : undefined
+  const submitLink = (): void => {
+    // Nothing to fetch with an empty field. The button is disabled in that
+    // state, so this is the guard Enter reaches rather than a press.
+    if (trimmed.length === 0) return
+    actions.openLink(trimmed, presetCwd)
+  }
+
   const raiseBanner = (): void => {
     setBannerSeq((seq) => seq + 1)
     setBannerShown(true)
@@ -127,12 +146,17 @@ function OpenCard({ state, actions, t }: {
       <Modal
         open
         onClose={actions.close}
-        title={t('dialog.title')}
+        // The card's heading names the flow the reader is in, not the one they
+        // might have expected: sharing and importing are the same surface, and a
+        // reader who asked to import should not be looking at a card titled
+        // "Share session". `flowOf` is `undefined` only while closed, which this
+        // component never renders.
+        title={flowOf(state) === 'share' ? t('dialog.title') : t('dialog.titleImport')}
         closeLabel={t('dialog.close')}
-        footer={footerFor(state, actions, t, copy)}
+        footer={footerFor(state, actions, t, { copy, ready: trimmed.length > 0 })}
       >
         <div className={CONTENT_CLASS}>
-          {bodyFor(state, actions, t, copy)}
+          {bodyFor(state, actions, t, { copy, link, setLink, submitLink })}
         </div>
       </Modal>
       {bannerShown && (
@@ -188,14 +212,58 @@ function copyHandler(actions: ShareMachine, onCopied: () => void): () => void {
   }
 }
 
-/** The dialog's buttons, per state. */
+/** What the footer's buttons need beyond the state. */
+interface FooterCommands {
+  /** Copy the generated link, and raise the banner when the write lands. */
+  readonly copy: () => void
+  /**
+   * Whether there is anything to fetch.
+   *
+   * The footer does not submit — its button is a `type="submit"` associated
+   * with the field's form, so the form's handler runs. This only decides
+   * whether that button is offered as ready.
+   */
+  readonly ready: boolean
+}
+
+/**
+ * The dialog's buttons, per state.
+ *
+ * Every state puts its buttons here, and every one of them is where a reader of
+ * this card already looks for one: the content box shows a thing, the row below
+ * acts on it. `enter-link` follows that rather than putting its action beside
+ * the field, so the row does not appear and disappear as the flow advances.
+ *
+ * @param state - what the card is showing.
+ * @param actions - the machine.
+ * @param t - the translator.
+ * @param commands - the card's own commands, which the footer shares.
+ * @returns the row.
+ */
 function footerFor(
   state: ShareState,
   actions: ShareMachine,
   t: SharePreviewProps['t'],
-  copy: () => void,
+  commands: FooterCommands,
 ): ReactNode {
+  const { copy, ready } = commands
   switch (state.kind) {
+    case 'enter-link':
+      return (
+        <>
+          <Button onClick={actions.close}>{t('dialog.cancel')}</Button>
+          {/* Associated with the field's form by id rather than nested in it, so
+              the button row stays where every other state puts it. `type="submit"`
+              is what makes `disabled` mean anything for Enter: with the button
+              outside the form, a `disabled` submit button suppresses the key
+              there, which is what an empty field needs. A `type="button"` here
+              submits regardless of its own disabled state — measured in Chrome,
+              with the field empty and with it filled. */}
+          <Button type="submit" form={LINK_FORM_ID} variant="primary" disabled={!ready}>
+            {t('import.preview')}
+          </Button>
+        </>
+      )
     case 'confirm-share':
       return (
         <>
@@ -253,14 +321,110 @@ function footerFor(
   }
 }
 
-/** The dialog's content, per state. */
+/**
+ * The link field, for a reader who has a link to paste.
+ *
+ * The value is lifted to the card: the submit button lives in the footer, the
+ * field lives in the content box, and the two have to agree about what is
+ * typed. `form` is what connects them — the button names the form's id rather
+ * than sitting inside it, which is the one arrangement where the button row
+ * stays where every other state puts it and Enter still works.
+ *
+ * The button keeps `type="submit"` for that reason alone: it is what makes the
+ * button's `disabled` stop Enter. A `type="button"` would submit the form
+ * through the implicit path whatever state it was in, so an empty field would
+ * reach `openLink` and fail on an empty URL instead of doing nothing. Measured
+ * both ways, empty and filled.
+ *
+ * Only the field is in the content box. What the box holds is a link, and the
+ * placeholder already says so; a label above it would be a sentence telling the
+ * reader what they can see.
+ *
+ * @param props - the current value, its setter, the submit, and the translator.
+ * @returns the field and its owning form.
+ */
+function LinkEntry({ link, onChange, onSubmit, t }: {
+  readonly link: string
+  readonly onChange: (value: string) => void
+  readonly onSubmit: () => void
+  readonly t: SharePreviewProps['t']
+}): ReactElement {
+  return (
+    // No style: a form is a block, so it fills the content box's width on its
+    // own, and the field is the only child. Measured — the field lands at the
+    // same width and x-position with no form rule at all.
+    <form
+      id={LINK_FORM_ID}
+      onSubmit={(event) => { event.preventDefault(); onSubmit() }}
+    >
+      <input
+        type="text"
+        value={link}
+        onChange={(event) => { onChange(event.target.value) }}
+        // The field has no visible label, so this is its accessible name; the
+        // same words are what the reader would have seen above it.
+        aria-label={t('import.linkLabel')}
+        placeholder={t('import.linkPlaceholder')}
+        autoComplete="off"
+        spellCheck={false}
+        // The dialog's initial focus lands here: this is the one control the
+        // reader came to use, so the card opens ready to paste rather than with
+        // focus on the close button.
+        data-modal-autofocus
+        style={linkInput}
+      />
+    </form>
+  )
+}
+
+/** The form the footer's submit button is associated with. */
+const LINK_FORM_ID = 'aishell-share-link-form'
+
+/** The field itself. */
+const linkInput: React.CSSProperties = {
+  boxSizing: 'border-box',
+  width: '100%',
+  height: 34,
+  padding: '0 10px',
+  border: '0.5px solid var(--dsw-alias-border-l4)',
+  borderRadius: 8,
+  font: 'inherit',
+  fontSize: 13,
+  background: 'var(--dsw-alias-bg-layer-1)',
+  color: 'var(--dsw-alias-label-primary)',
+}
+
+/** What the content box needs beyond the state. */
+interface BodyCommands {
+  /** Copy the generated link, and raise the banner when the write lands. */
+  readonly copy: () => void
+  /** What the link field currently holds. */
+  readonly link: string
+  /** Record a keystroke in the link field. */
+  readonly setLink: (value: string) => void
+  /** Start the fetch for whatever the field holds. */
+  readonly submitLink: () => void
+}
+
+/**
+ * The dialog's content, per state.
+ *
+ * @param state - what the card is showing.
+ * @param actions - the machine.
+ * @param t - the translator.
+ * @param commands - the card's own commands, which the box shares.
+ * @returns the content.
+ */
 function bodyFor(
   state: ShareState,
   actions: ShareMachine,
   t: SharePreviewProps['t'],
-  copy: () => void,
+  commands: BodyCommands,
 ): ReactNode {
+  const { copy, link, setLink, submitLink } = commands
   switch (state.kind) {
+    case 'enter-link':
+      return <LinkEntry link={link} onChange={setLink} onSubmit={submitLink} t={t} />
     case 'confirm-share':
       return <p style={paragraph}>{t('share.disclosure')}</p>
     case 'sharing':

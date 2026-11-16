@@ -22,13 +22,17 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 // Type-only: pulls the chat plugin's slot ledger entry for the Turn action row.
 import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
+// Type-only: pulls the ctx.contextMenus merge and the `workspace` target shape,
+// which is what a Workspace's own menu row registers into.
+import type {} from '@deepseek-ai/dsh-client-ui-context-menu/client'
 // Type-only: pulls ctx.aishellDeepLinks from the transport's Page half.
 import type {} from '@huaweidevtools/aishell-dsh-deeplink/client'
 
+import { createElement } from 'react'
+import { IconDownloadOutlineRegular, writeClipboard } from '@deepseek-ai/dsh-client-ui-primitives'
+
 import type { SharePackage } from '../package.ts'
-import { readSharePath, SESSION_KIND } from '../route.ts'
-import { SHARE_CLIENT_ROUTE } from '../route.ts'
-import { writeClipboard } from '@deepseek-ai/dsh-client-ui-primitives'
+import { FAMILY, readShareId, SHARE_CLIENT_ROUTE } from '../route.ts'
 import { createShareMachine, type ShareDriver } from './machine.ts'
 import { openSessionAfterRefresh } from './open-session.ts'
 import { installDialStyles } from './dial.ts'
@@ -38,16 +42,21 @@ import { SharePreview, type SharePreviewInjected } from './SharePreview.tsx'
 import { ShareSessionMenuItem, type ShareSessionMenuItemInjected } from './ShareSessionMenuItem.tsx'
 import { NS, zh, en } from './locales.ts'
 
-export { advance, beginImport, beginShare, CLOSED, isOpen, type ShareState } from './state.ts'
+export { advance, beginImport, beginShare, CLOSED, flowOf, isOpen, type Flow, type ShareState } from './state.ts'
 export { createShareMachine, type ShareDriver, type ShareMachine } from './machine.ts'
 export { openSessionAfterRefresh, type OpenSessionDeps } from './open-session.ts'
 
 export const name = 'aishell-share'
 
-/** The URL family this plugin owns. */
-export const FAMILY = 'share'
+/**
+ * Icon key for the Workspace menu's import row.
+ *
+ * Prefixed like every other key this plugin owns, so it cannot collide with a
+ * shipped `workspace.*` glyph.
+ */
+const IMPORT_MENU_ICON = 'aishell-share.import'
 
-export const inject = ['slots', 'locale', 'aishellDeepLinks']
+export const inject = ['slots', 'locale', 'aishellDeepLinks', 'contextMenus']
 
 /**
  * What the Host route answers.
@@ -164,8 +173,9 @@ export function apply(ctx: ClientContext): void {
   const machine = createShareMachine(driver)
 
   ctx.effect(() => ctx.aishellDeepLinks.claim(FAMILY, (url: URL) => {
-    const path = readSharePath(url)
-    if (path === undefined || path.kind !== SESSION_KIND) return
+    // A kind this build does not handle is ignored rather than reported: the
+    // sender may be a newer version, and the claim answers for the whole family.
+    if (readShareId(url) === undefined) return
     machine.openLink(url.href)
   }), 'aishell-share: share family')
 
@@ -181,6 +191,41 @@ export function apply(ctx: ClientContext): void {
       startShare: (sessionId) => { machine.shareSession(sessionId) },
     }),
   }, ShareSessionMenuItem)), 'aishell-share: menu row')
+
+  // Import, from a Workspace's own menu.
+  //
+  // `ctx.contextMenus` rather than a slot: the shipped row and delete actions
+  // are built-in contributions, and the slot documentation says plainly that
+  // slot priority cannot replace or join them. A structured contribution is the
+  // supported way to add a row to that menu, and it is the same registry the
+  // shipped entries use.
+  //
+  // The target carries the Workspace's absolute `path`, so the import lands
+  // where the reader right-clicked without a second question. That is the one
+  // difference from an incoming link, which arrives with no such context.
+  ctx.effect(() => ctx.contextMenus.register({
+    id: 'aishell-share.import',
+    target: 'workspace',
+    // Before rename (100): importing into a Workspace is what a reader comes to
+    // that menu for far more often than renaming it.
+    order: 50,
+    resolve: (workspace) => [{
+      id: 'import',
+      label: ctx.locale.bind(NS)('menu.importSession'),
+      // Every other row in this menu carries one, and a bare label among them
+      // reads as unfinished rather than as a different kind of action.
+      icon: { key: IMPORT_MENU_ICON },
+      run: () => { machine.requestImport(workspace.path) },
+    }],
+  }), 'aishell-share: workspace import action')
+
+  // The renderer for that key. `contextMenu.icon` is a keyed slot: an action
+  // names a string, and whoever owns the glyph registers it here. Without this
+  // the action still appears — it simply has no icon.
+  ctx.effect(() => ctx.slots.inject('contextMenu.icon', () => ctx.slots.register({
+    name: 'contextMenu.icon',
+    key: IMPORT_MENU_ICON,
+  }, () => createElement(IconDownloadOutlineRegular, { size: 16 }))), 'aishell-share: import menu icon')
 
   // The share button in a completed Turn's action row. `inject` receives the
   // session id, so a row in any conversation opens that conversation's dialog;

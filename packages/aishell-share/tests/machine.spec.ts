@@ -8,6 +8,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { createShareMachine, type ShareDriver } from '../src/client/machine.ts'
+import { flowOf, type ShareState } from '../src/client/state.ts'
 import type { SharePackage } from '../src/package.ts'
 
 /** A package with one turn. */
@@ -260,6 +261,150 @@ describe('importing', () => {
     machine.openLink('aishell://share/session')
 
     await vi.waitFor(() => { expect(machine.getSnapshot().kind).toBe('failed') })
+  })
+
+  it('refuses a link from another family without asking the service', async () => {
+    // The import field takes whatever the reader has on their clipboard, so the
+    // family has to be checked before anything leaves the machine: a path with
+    // two segments is not a share, and its last segment is not an id.
+    const fetchFn = vi.fn()
+    const machine = createShareMachine({ ...okDriver(), fetch: fetchFn as never })
+
+    machine.openLink('https://example.com/a/b')
+
+    await vi.waitFor(() => {
+      expect(machine.getSnapshot()).toEqual({ kind: 'failed', stage: 'import', reason: 'rejected' })
+    })
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('refuses a share link of a kind this build does not read', async () => {
+    // `share` is a family and the kind grows; an unknown one is not an error the
+    // sender should hear about, but it is also not a session to fetch.
+    const fetchFn = vi.fn()
+    const machine = createShareMachine({ ...okDriver(), fetch: fetchFn as never })
+
+    machine.openLink('aishell://share/file/f1')
+
+    await vi.waitFor(() => { expect(machine.getSnapshot().kind).toBe('failed') })
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+})
+
+describe('importing from a Workspace menu', () => {
+  it('opens on the link field, with nothing fetched yet', () => {
+    // A reader who came from a Workspace's menu has no link; `fetching` would
+    // be this dialog claiming to fetch something it was never given.
+    const fetchFn = vi.fn()
+    const machine = createShareMachine({ ...okDriver(), fetch: fetchFn as never })
+
+    machine.requestImport('/work/project')
+
+    expect(machine.getSnapshot()).toEqual({ kind: 'enter-link', presetCwd: '/work/project' })
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('carries the preset directory through the fetch into the preview', async () => {
+    const machine = createShareMachine(okDriver())
+    machine.openLink(LINK, '/work/project')
+
+    await vi.waitFor(() => {
+      expect(machine.getSnapshot()).toEqual({
+        kind: 'preview',
+        session: PKG,
+        presetCwd: '/work/project',
+      })
+    })
+  })
+
+  it('names the import flow, so the card is not titled as a share', () => {
+    // One surface serves both flows, so the heading comes from the state. Every
+    // state the import can be in says so.
+    const machine = createShareMachine(okDriver())
+    expect(flowOf(machine.getSnapshot())).toBeUndefined()
+
+    machine.requestImport('/work/project')
+    expect(flowOf(machine.getSnapshot())).toBe('import')
+  })
+
+  it('names every import state, not just the first', () => {
+    // The heading is read on each render, so a state that fell through to
+    // "share" would show the wrong title mid-flow — after the fetch, while
+    // choosing a directory, and while the copy is being written.
+    const states: ShareState[] = [
+      { kind: 'enter-link' },
+      { kind: 'fetching', link: LINK },
+      { kind: 'preview', session: PKG },
+      { kind: 'choose-workspace', session: PKG, workspaces: [] },
+      { kind: 'importing', session: PKG },
+    ]
+    for (const state of states) expect(flowOf(state)).toBe('import')
+  })
+
+  it('names every sharing state, not just the first', () => {
+    const states: ShareState[] = [
+      { kind: 'confirm-share', sessionId: 's-1' },
+      { kind: 'sharing', sessionId: 's-1' },
+      { kind: 'shared', url: LINK },
+    ]
+    for (const state of states) expect(flowOf(state)).toBe('share')
+  })
+
+  it('has no flow while closed', () => {
+    // Nothing is showing, so there is no card to title.
+    expect(flowOf({ kind: 'closed' })).toBeUndefined()
+  })
+
+  it('names the sharing flow from the confirmation onward', () => {
+    const machine = createShareMachine(okDriver())
+    machine.shareSession('s-1')
+
+    expect(flowOf(machine.getSnapshot())).toBe('share')
+  })
+
+  it('names the flow a failure happened in, not the one expected', () => {
+    // A failed state is reached from either flow, and the heading has to agree
+    // with the failure copy underneath it.
+    const machine = createShareMachine(okDriver({ fetch: async () => ({ ok: false, reason: 'unavailable' }) }))
+    machine.openLink(LINK)
+
+    return vi.waitFor(() => {
+      expect(flowOf(machine.getSnapshot())).toBe('import')
+    })
+  })
+
+  it('imports straight into the preset directory, asking nothing', async () => {
+    // The Workspace menu already answered "where should this land", so an
+    // import that asked again would be asking the reader to repeat themselves.
+    const importFn = vi.fn(async () => ({ ok: true as const, sessionId: 's-new' }))
+    const workspaces = vi.fn(() => [])
+    const machine = createShareMachine({ ...okDriver(), import: importFn, workspaces })
+
+    machine.openLink(LINK, '/work/project')
+    await vi.waitFor(() => { expect(machine.getSnapshot().kind).toBe('preview') })
+
+    machine.importPreview()
+
+    expect(machine.getSnapshot().kind).toBe('importing')
+    expect(workspaces).not.toHaveBeenCalled()
+    await vi.waitFor(() => {
+      expect(importFn).toHaveBeenCalledWith(PKG, '/work/project', expect.any(AbortSignal))
+    })
+  })
+
+  it('still asks when the import came from an incoming link', async () => {
+    // The control for the case above: without a preset the directory question
+    // is what the reader is answering, and it must not be skipped.
+    const workspaces = vi.fn(() => [{ id: 'w-1', title: 'Project', path: '/work/project' }])
+    const machine = createShareMachine({ ...okDriver(), workspaces })
+
+    machine.openLink(LINK)
+    await vi.waitFor(() => { expect(machine.getSnapshot().kind).toBe('preview') })
+
+    machine.importPreview()
+
+    expect(workspaces).toHaveBeenCalled()
+    expect(machine.getSnapshot().kind).toBe('choose-workspace')
   })
 })
 

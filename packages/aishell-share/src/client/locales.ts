@@ -38,6 +38,7 @@ export const zh = {
   // buttons where every label is one or two words.
   'action.share': '分享以上对话',
   'dialog.title': '分享会话',
+  'dialog.titleImport': '导入会话',
   'dialog.close': '关闭',
   'dialog.cancel': '取消',
 
@@ -51,8 +52,14 @@ export const zh = {
   'dialog.shareConfirm': '分享',
   'dialog.copy': '复制链接',
 
+  // The Workspace menu row.
+  'menu.importSession': '导入会话',
+
   // Importing.
   'import.loading': '加载会话',
+  'import.linkLabel': '会话分享链接',
+  'import.linkPlaceholder': '粘贴分享链接',
+  'import.preview': '预览',
   'import.chooseWorkspace': '选择导入到哪个工作区',
   'import.browse': '选择其他文件夹…',
   'import.importing': '正在导入',
@@ -83,6 +90,7 @@ export const en = {
   'menu.share': 'Share session',
   'action.share': 'Share conversation so far',
   'dialog.title': 'Share session',
+  'dialog.titleImport': 'Import conversation',
   'dialog.close': 'Close',
   'dialog.cancel': 'Cancel',
 
@@ -95,7 +103,12 @@ export const en = {
   'dialog.shareConfirm': 'Share',
   'dialog.copy': 'Copy link',
 
+  'menu.importSession': 'Import conversation',
+
   'import.loading': 'Loading',
+  'import.linkLabel': 'Conversation link',
+  'import.linkPlaceholder': 'Paste a share link',
+  'import.preview': 'Preview',
   'import.chooseWorkspace': 'Choose where to import this conversation',
   'import.browse': 'Choose another folder…',
   'import.importing': 'Importing',

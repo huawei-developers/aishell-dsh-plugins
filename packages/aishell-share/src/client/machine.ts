@@ -9,11 +9,12 @@
  */
 
 import type { SharePackage } from '../package.ts'
-import { readSharePath } from '../route.ts'
+import { readShareId } from '../route.ts'
 import type { ServiceFailure } from '../service.ts'
 import {
   advance,
   beginImport,
+  beginLinkEntry,
   beginShare,
   CLOSED,
   type ShareState,
@@ -103,16 +104,31 @@ export interface ShareMachine {
    *   Turn. Omitted, the whole conversation is shared.
    */
   readonly shareSession: (sessionId: string, messageId?: string) => void
-  /** Open on an incoming link and start fetching. */
-  readonly openLink: (link: string) => void
+  /**
+   * Open the link field, for a reader who has a link to paste.
+   *
+   * @param presetCwd - the directory the copy lands in, when the caller is a
+   *   Workspace's own menu and has already named one. Omitted, the import asks.
+   */
+  readonly requestImport: (presetCwd?: string) => void
+  /**
+   * Open on an incoming link and start fetching.
+   *
+   * @param link - the URL the shell delivered.
+   * @param presetCwd - where the copy lands, when the caller already knows.
+   */
+  readonly openLink: (link: string, presetCwd?: string) => void
   /** The reader confirmed the upload. */
   readonly confirmShare: () => void
   /**
    * The reader asked to import what is previewed.
    *
-   * Always asks where it should land, even with a single workspace listed:
-   * the copy is a durable addition to someone's machine, and the directory it
-   * joins is their decision rather than a default this code picks.
+   * Asks where the copy should land unless one was named before the fetch —
+   * a Workspace menu already answered that question, and asking again would be
+   * asking the reader to repeat themselves. Without a preset it always asks,
+   * even with a single workspace listed: the copy is a durable addition to
+   * someone's machine, and the directory it joins is their decision rather than
+   * a default this code picks.
    */
   readonly importPreview: () => void
   /** The reader picked one of the offered directories. */
@@ -208,27 +224,18 @@ export function createShareMachine(driver: ShareDriver): ShareMachine {
     if (inflight === controller) inflight = undefined
   }
 
-  /**
-   * Read the id out of a link this build opened.
-   *
-   * Delegates to the same parser the claim uses, so the two cannot disagree
-   * about what a link means — a second split here is how a machine that accepts
-   * `share/session/a/b` ends up fetching `a` instead of `a/b`.
-   *
-   * @param link - the URL the transport delivered.
-   * @returns the id, or undefined when the link names no resource.
-   */
-  const idOf = (link: string): string | undefined => {
-    try {
-      return readSharePath(new URL(link))?.id
-    } catch {
-      return undefined
-    }
-  }
-
   const fetchInto = async (link: string): Promise<void> => {
     const { controller, started } = beginRequest()
-    const id = idOf(link)
+    // `readShareId` is the whole admission — family and kind — and it is shared
+    // with the claim, so the two cannot disagree about what a link means. A
+    // second split here is how a machine that accepts `share/session/a/b` ends
+    // up fetching `a` instead of `a/b`.
+    //
+    // Admission rather than parsing is what this needs: the claim has already
+    // filtered by family, but a link the reader pasted into the import field has
+    // not, and a foreign path that happens to have two segments would otherwise
+    // be read as an id and looked up.
+    const id = readShareId(link)
     if (id === undefined) {
       settleRequest(controller)
       publishFrom(started, advance(state, { type: 'failed', reason: 'rejected' }))
@@ -286,11 +293,18 @@ export function createShareMachine(driver: ShareDriver): ShareMachine {
       publish(beginShare(sessionId, messageId))
     },
 
-    openLink(link: string): void {
+    requestImport(presetCwd?: string): void {
       inflight?.abort()
       inflight = undefined
       generation += 1
-      publish(beginImport(link))
+      publish(beginLinkEntry(presetCwd))
+    },
+
+    openLink(link: string, presetCwd?: string): void {
+      inflight?.abort()
+      inflight = undefined
+      generation += 1
+      publish(beginImport(link, presetCwd))
       void fetchInto(link)
     },
 
@@ -302,6 +316,17 @@ export function createShareMachine(driver: ShareDriver): ShareMachine {
 
     importPreview(): void {
       if (state.kind !== 'preview') return
+      // Captured before `publish`: it replaces `state`, so reading the fields
+      // afterwards would read the state the import just moved to.
+      const { session, presetCwd } = state
+      if (presetCwd !== undefined) {
+        // The caller named the directory before the fetch, so the question has
+        // already been answered. Navigating the same path `importInto` takes
+        // keeps one way in to the write.
+        publish(advance(state, { type: 'import' }))
+        void importFrom(session, presetCwd)
+        return
+      }
       // Always asked, even with one workspace listed: the reader is choosing
       // where a copy of someone else's conversation lands, which is a
       // decision rather than a default.

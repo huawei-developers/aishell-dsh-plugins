@@ -1,7 +1,7 @@
 {
   "name": "@huaweidevtools/aishell-dsh-qr",
   "description": "Renders short text as a scannable QR-code PNG in the conversation working directory, so a link meant for a phone can be shown on screen",
-  "version": "0.0.30",
+  "version": "0.0.31",
   "publishConfig": {
     "access": "public"
   },

@@ -29,7 +29,15 @@ import { createHmac } from "node:crypto";
  * optional — including a non-whitelisted param would mismatch the service's
  * own StringToSign and produce 403 SignatureDoesNotMatch.
  *
- * Copied verbatim from esdk-obs-nodejs utils.js line 145-224.
+ * The names come from esdk-obs-nodejs `utils.js` (the
+ * `allowedResourceParameterNames` array) with one deliberate departure: every
+ * entry here is lowercase, because {@link canonicalizedResource} lowercases the
+ * param before testing it. The SDK's list spells one entry `requestPayment`,
+ * and copying that spelling would put a member in this set that no lookup can
+ * ever reach — the lookup always asks with a lowercased key, so `requestPayment`
+ * would sit beside `requestpayment` and never be consulted. The SDK's list also
+ * names `requestpayment` and `position` twice each; they appear once here,
+ * which is all a set can hold.
  */
 const ALLOWED_RESOURCE_PARAMETER_NAMES: ReadonlySet<string> = new Set([
   "acl",
@@ -74,7 +82,6 @@ const ALLOWED_RESOURCE_PARAMETER_NAMES: ReadonlySet<string> = new Set([
   "directcoldaccess",
   "rename",
   "name",
-  "requestpayment",
   "metadata",
   "modify",
   "attname",
@@ -105,7 +112,6 @@ const ALLOWED_RESOURCE_PARAMETER_NAMES: ReadonlySet<string> = new Set([
   "obscompresspolicy",
   // truncate / modify sub-resources
   "length",
-  "position",
 ]);
 
 /** Header prefix for OBS custom headers (x-obs-). */
@@ -256,11 +262,19 @@ function canonicalizedResource(url: URL): string {
   // Collect whitelisted sub-resources.
   const subResources: Array<{ key: string; value: string | null }> = [];
   for (const [key, value] of url.searchParams.entries()) {
+    // Tested lowercased, kept as received. The SDK does the same, and the
+    // asymmetry is deliberate: the service builds its own StringToSign by
+    // appending the key in whatever case the request carried, so signing a
+    // camel-cased key in lowercase would disagree with it and earn a 403.
     if (ALLOWED_RESOURCE_PARAMETER_NAMES.has(key.toLowerCase())) {
       subResources.push({ key, value: value || null });
     }
   }
   if (subResources.length > 0) {
+    // Sorted by key alone, where the SDK sorts the whole `key=value` string.
+    // The two agree for every pair a set can hold: one key appears once, and a
+    // bare `k` is always a prefix of the same key carrying a value, so it
+    // sorts first either way.
     subResources.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
     const parts = subResources.map((s) => (s.value === null ? s.key : s.key + "=" + s.value));
     path += "?" + parts.join("&");

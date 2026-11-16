@@ -202,6 +202,28 @@ describe('the four readers agree about a module-based deployment', () => {
     }
   })
 
+  it('the digest is the same whether the files are read one at a time or together', async () => {
+    // The reads were made concurrent; the digest must not have moved with them.
+    // It is what every gate compares against, so a change here would silently
+    // invalidate designs that were already checked. Computed against a
+    // hand-rolled serial version of the same algorithm.
+    const dir = await moduleDeployment()
+    try {
+      const files = await configurationFiles(dir)
+      const { createHash } = await import('node:crypto')
+      const { readFile } = await import('node:fs/promises')
+      const parts: string[] = []
+      for (const name of files) {
+        const content = await readFile(join(dir, name), 'utf8')
+        parts.push(`${name}${createHash('sha256').update(content, 'utf8').digest('hex')}`)
+      }
+      const expected = `sha256:${createHash('sha256').update(parts.join(''), 'utf8').digest('hex')}`
+      expect(await computeTfHash(dir)).toBe(expected)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it('the credential scan finds a secret written in the module', async () => {
     // It compiles into the plan, so it is exactly as exposed as one in the root.
     const dir = await moduleDeployment()

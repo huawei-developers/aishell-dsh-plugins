@@ -34,6 +34,7 @@ import { cutForMessage, keepThrough } from './truncate.ts'
 import { SESSION_KIND, SHARE_ROUTE } from './route.ts'
 import { VERSION } from './version.ts'
 import { createShare, readShare, type ServiceFailure } from './service.ts'
+import { attachToWorkspace } from './attach.ts'
 
 export const name = 'aishell-share'
 
@@ -234,6 +235,14 @@ export function apply(ctx: Context, config: Config): void {
       } finally {
         await handle.close()
       }
+      // The copy is stored, and that alone does not put it in a Workspace.
+      // Membership is an explicit registry list, not a fact derived from the
+      // header: the sidebar's groups are built from each Workspace's
+      // `sessionIds`, so a session whose header names the directory but which
+      // nobody attached lands in the ungrouped section. `attachSession`
+      // revalidates the header against the Workspace's own path and records
+      // the id, which is what a session created here would have gone through.
+      await attachToWorkspace(ctx, id, cwd, log)
       return id
     } catch (error) {
       log.warn(`import failed: ${String(error)}`)

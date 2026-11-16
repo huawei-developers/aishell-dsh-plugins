@@ -126,6 +126,7 @@ without republishing.
 
 ```
 src/index.ts                 Node half: read a session, write an imported one
+src/attach.ts                record the copy in the Workspace that owns it
 src/package.ts               the package format, selection and reference rewriting
 src/route.ts                 constants and the link admission both halves share
 src/service.ts               the service's two HTTP calls

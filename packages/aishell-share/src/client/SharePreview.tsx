@@ -55,6 +55,7 @@ import {
   LINK_COPY_CLASS,
   LINK_TEXT_CLASS,
   TOOL_CHIP_CLASS,
+  TOOL_CHIP_ERROR_CLASS,
   TRANSCRIPT_CLASS,
   WORKSPACE_HINT_CLASS,
   WORKSPACE_ICON_CLASS,
@@ -534,15 +535,19 @@ function LinkBox(
  * The conversation, as a reader sees it.
  *
  * The reader's own turns sit right and filled; the assistant's sit left as plain
- * text. Tool calls are one folded line each, on the left with the assistant:
- * they are what the assistant did.
+ * text. A tool call and its result are one folded chip each, on the left with
+ * the assistant: they are what the assistant did.
  *
  * @param session - the package being previewed.
  * @param emptyLabel - copy for a package with no readable messages.
+ * @param t - the translator.
  * @returns the conversation.
  */
 function Conversation(
-  { session, emptyLabel }: { readonly session: SharePackage, readonly emptyLabel: string },
+  { session, emptyLabel }: {
+    readonly session: SharePackage
+    readonly emptyLabel: string
+  },
 ): ReactElement {
   const lines = previewLines(session)
   return (
@@ -560,11 +565,22 @@ function Conversation(
 /**
  * One line of the preview, drawn for the side it came from.
  *
+ * A tool call and its result share one chip. They are the two halves of a
+ * single invocation, and giving them different furniture would say the
+ * conversation changed rather than the outcome did; the error colour is what
+ * marks a result the tool reported as a failure.
+ *
  * @param line - the line to draw.
  * @returns the bubble or the tool chip.
  */
 function Bubble({ line }: { readonly line: PreviewLine }): ReactElement {
-  if (line.role === 'tool') return <span className={TOOL_CHIP_CLASS}>{line.text}</span>
+  if (line.role === 'tool-call' || line.role === 'tool-result') {
+    return (
+      <span className={line.isError === true ? `${TOOL_CHIP_CLASS} ${TOOL_CHIP_ERROR_CLASS}` : TOOL_CHIP_CLASS}>
+        {line.text}
+      </span>
+    )
+  }
   return (
     <div className={line.role === 'user' ? BUBBLE_MINE_CLASS : BUBBLE_REPLY_CLASS}>
       {line.text}

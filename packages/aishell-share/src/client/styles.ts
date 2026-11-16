@@ -68,8 +68,18 @@ export const BUBBLE_MINE_CLASS = 'aishell-share-bubble-mine'
 /** One message the conversation returned. */
 export const BUBBLE_REPLY_CLASS = 'aishell-share-bubble-reply'
 
-/** One folded tool call. */
+/** One folded half of a tool invocation. */
 export const TOOL_CHIP_CLASS = 'aishell-share-tool-chip'
+
+/**
+ * The variant on a tool result the tool itself reported as an error.
+ *
+ * The chip keeps its shape and gains only the error colour: an error is the
+ * same kind of thing as a success — one tool's answer — and drawing it as a
+ * different piece of furniture would say the conversation had changed rather
+ * than the outcome.
+ */
+export const TOOL_CHIP_ERROR_CLASS = 'aishell-share-tool-chip-error'
 
 /** The workspace list the import asks into. */
 export const WORKSPACE_LIST_CLASS = 'aishell-share-workspaces'
@@ -223,6 +233,17 @@ const CSS = `
   font: 11px/1.6 "SF Mono", "JetBrains Mono", Consolas, monospace;
   color: var(--dsw-alias-label-tertiary);
   overflow-wrap: anywhere;
+  /* A tool can return a paragraph, and an unbounded chip would take the whole
+     box. Three lines is enough to recognise the answer; the rest is history. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.${TOOL_CHIP_ERROR_CLASS} {
+  color: var(--dsw-alias-state-error-primary);
+  border-color: var(--dsw-alias-state-error-primary);
 }
 
 /* ── Choosing a workspace ───────────────────────────────────────────────── */

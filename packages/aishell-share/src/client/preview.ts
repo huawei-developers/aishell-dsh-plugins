@@ -2,8 +2,21 @@
  * Turning a share package into something a person can read.
  *
  * The preview shows what the conversation said, not what the log recorded: an
- * event type names nothing to a reader. Tool calls are folded into one line
- * each — they are history in the preview, and they are not runnable.
+ * event type names nothing to a reader. A tool invocation becomes two lines —
+ * the call and its result — because a reader has to see both ends to judge
+ * whether the tool did what was asked.
+ *
+ * ## Where each event keeps its words
+ *
+ * The log does not use one shape for a message. What a person typed sits flat on
+ * the event's `data`; what the model or a tool produced sits under
+ * `data.message`. Reading the same path for both is how an assistant reply
+ * becomes an empty line with nothing failing, so each reader below reads from
+ * where its own writer puts it.
+ *
+ * A content block is identified by its own `type` tag. Only a `text` block
+ * carries words for a reader: `reasoning` is the model thinking aloud, and
+ * `image` and `file` reference attachments this preview does not resolve.
  *
  * Pure, so the extraction rules can be asserted without a renderer.
  *
@@ -12,8 +25,14 @@
 
 import type { ShareEvent, SharePackage } from '../package.ts'
 
-/** Who a preview line is attributed to. */
-export type PreviewRole = 'user' | 'assistant' | 'tool'
+/**
+ * Who a preview line is attributed to.
+ *
+ * The last two reuse DSH's own tags for the two halves of a tool invocation —
+ * the content-block types `tool-call` and `tool-result` — so the preview and the
+ * log speak one vocabulary rather than two.
+ */
+export type PreviewRole = 'user' | 'assistant' | 'tool-call' | 'tool-result'
 
 /** One line of the preview. */
 export interface PreviewLine {
@@ -28,26 +47,18 @@ export interface PreviewLine {
   readonly role: PreviewRole
   /** The text to show. */
   readonly text: string
+  /** Set on a tool result the tool itself reported as an error. */
+  readonly isError?: true
 }
 
 /** A line before its position is attached. */
 type UnplacedLine = Omit<PreviewLine, 'at'>
 
-/** A user or assistant message's data, as this module reads it. */
-interface MessageData {
-  readonly id?: unknown
-  readonly role?: unknown
-  readonly content?: unknown
-}
-
 /**
- * Read the text out of one message's content.
+ * Read the text out of a content-block list.
  *
- * Only `text` blocks carry anything a reader can see; images and file
- * attachments have no body here to render.
- *
- * @param content - the message's content blocks.
- * @returns the concatenated text.
+ * @param content - a message's content blocks.
+ * @returns the concatenated text of its `text` blocks.
  */
 function textOf(content: unknown): string {
   if (!Array.isArray(content)) return ''
@@ -58,6 +69,32 @@ function textOf(content: unknown): string {
     if (record['type'] === 'text' && typeof record['text'] === 'string') parts.push(record['text'])
   }
   return parts.join('')
+}
+
+/** A `user/message` event's data: the content blocks are flat on it. */
+interface UserMessageData {
+  readonly content?: unknown
+  readonly source?: unknown
+}
+
+/**
+ * An `assistant/message` or `tool/result` event's data.
+ *
+ * Both wrap a message, and the message is where the content blocks and the
+ * error flag live. A user turn is flat instead, which is why its reader takes no
+ * part of this.
+ */
+interface WrappedMessageData {
+  readonly message?: {
+    readonly content?: unknown
+    readonly isError?: unknown
+  }
+}
+
+/** A `tool/call` event's data. */
+interface ToolCallData {
+  readonly name?: unknown
+  readonly arguments?: unknown
 }
 
 /**
@@ -81,29 +118,83 @@ function isHumanMessage(data: unknown): boolean {
 }
 
 /**
- * Read one message event into a line.
+ * Read a turn the person typed.
  *
- * @param event - a `user/message` or `assistant/message` event.
- * @param role - the role the event carries.
- * @returns the line, or undefined when there is no text to show.
+ * @param event - a `user/message` event.
+ * @returns the line, or undefined when nothing a person wrote is in it.
  */
-function messageLine(event: ShareEvent, role: 'user' | 'assistant'): UnplacedLine | undefined {
-  const data = event.data as MessageData | undefined
-  if (role === 'user' && !isHumanMessage(data)) return undefined
+function userLine(event: ShareEvent): UnplacedLine | undefined {
+  const data = event.data as UserMessageData | undefined
+  if (!isHumanMessage(data)) return undefined
   const text = textOf(data?.content)
-  return text === '' ? undefined : { role, text }
+  return text === '' ? undefined : { role: 'user', text }
 }
 
 /**
- * Read a tool call into one folded line.
+ * Read a turn the model wrote.
+ *
+ * @param event - an `assistant/message` event.
+ * @returns the line, or undefined when the reply carried no text.
+ */
+function assistantLine(event: ShareEvent): UnplacedLine | undefined {
+  const text = textOf((event.data as WrappedMessageData | undefined)?.message?.content)
+  return text === '' ? undefined : { role: 'assistant', text }
+}
+
+/**
+ * Read a tool call into one line.
+ *
+ * The arguments are part of the line because they are what say whether the call
+ * was plausible. A bare tool name is the least informative half of the pair,
+ * and a reader judging a conversation has no other way to see what was asked.
  *
  * @param event - a `tool/call` event.
- * @returns the line naming the tool.
+ * @returns the line naming the tool and its arguments.
  */
-function toolLine(event: ShareEvent): UnplacedLine | undefined {
-  const data = event.data as { name?: unknown } | undefined
+function toolCallLine(event: ShareEvent): UnplacedLine | undefined {
+  const data = event.data as ToolCallData | undefined
   const name = typeof data?.name === 'string' ? data.name : undefined
-  return name === undefined ? undefined : { role: 'tool', text: name }
+  if (name === undefined) return undefined
+  const args = typeof data?.arguments === 'string' ? data.arguments : ''
+  return { role: 'tool-call', text: args === '' ? name : `${name}(${args})` }
+}
+
+/**
+ * Read a tool result into one line.
+ *
+ * @param event - a `tool/result` event.
+ * @returns the line carrying what the tool returned.
+ */
+function toolResultLine(event: ShareEvent): UnplacedLine | undefined {
+  const data = event.data as WrappedMessageData | undefined
+  const text = textOf(data?.message?.content)
+  if (text === '') return undefined
+  return {
+    role: 'tool-result',
+    text,
+    ...data?.message?.isError === true ? { isError: true } : {},
+  }
+}
+
+/**
+ * Read one event into a line, by its type.
+ *
+ * A switch rather than a chain of ternaries: the event types are a closed set
+ * this module answers for, and a shape that names each one is readable at a
+ * glance. Every other type — turn and step boundaries, the title, whatever a
+ * future log adds — has no line, which is what the absent default says.
+ *
+ * @param event - one event from the package.
+ * @returns the line it contributes, or undefined when it contributes none.
+ */
+function lineOf(event: ShareEvent): UnplacedLine | undefined {
+  switch (event.type) {
+    case 'user/message': return userLine(event)
+    case 'assistant/message': return assistantLine(event)
+    case 'tool/call': return toolCallLine(event)
+    case 'tool/result': return toolResultLine(event)
+    default: return undefined
+  }
 }
 
 /**
@@ -114,15 +205,9 @@ function toolLine(event: ShareEvent): UnplacedLine | undefined {
  */
 export function previewLines(pkg: SharePackage): PreviewLine[] {
   const lines: PreviewLine[] = []
-  pkg.events.forEach((event, at) => {
-    const found = event.type === 'user/message'
-      ? messageLine(event, 'user')
-      : event.type === 'assistant/message'
-        ? messageLine(event, 'assistant')
-        : event.type === 'tool/call'
-          ? toolLine(event)
-          : undefined
+  for (const [at, event] of pkg.events.entries()) {
+    const found = lineOf(event)
     if (found !== undefined) lines.push({ at, ...found })
-  })
+  }
   return lines
 }

@@ -148,6 +148,111 @@ describe('references are re-anchored onto the carried events', () => {
   })
 })
 
+describe('the surface head', () => {
+  /** A system message as the log stores it: the rendered prompt. */
+  const head = (seq: number, text = 'rendered prompt', op: unknown = 'append'): StoredLike => ({
+    type: 'system/message',
+    seq,
+    time: 1,
+    surfaceOp: op,
+    data: {
+      turn: 1,
+      step: 1,
+      message: { role: 'system', content: [{ type: 'text', text }], source: { kind: 'system-prompt' }, id: `head-${seq}` },
+    },
+  })
+
+  /** The events that open a conversation, up to its first user message. */
+  const opening = (): StoredLike[] => [
+    { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
+    { type: 'step/start', seq: 1, time: 1, data: { turn: 1, step: 1 } },
+    head(2),
+    { type: 'user/message', seq: 3, time: 1, data: { source: { kind: 'user' } }, surfaceOp: 'append' },
+    { type: 'step/end', seq: 4, time: 1, data: { turn: 1, step: 1 } },
+    { type: 'turn/end', seq: 5, time: 1, data: { turn: 1 } },
+  ]
+
+  it('travels with its content emptied', () => {
+    // The head holds the surface's first position; the prompt text belongs to
+    // the sender's machine, not the reader's. A copy without a head imports,
+    // then fails its *next* turn, when the prompt it renders has to append one.
+    const carried = selectEvents(opening()).find((event) => event.type === 'system/message')
+
+    const message = (carried?.data as { message?: { content?: unknown, id?: unknown } } | undefined)?.message
+    expect(carried?.surfaceOp).toBe('append')
+    expect(message?.content).toEqual([])
+    // The envelope stays: the format validates the id and reads the role.
+    expect(message?.id).toBe('head-2')
+  })
+
+  it('travels only the first head, never a later replacement of it', () => {
+    const selected = selectEvents([
+      ...opening(),
+      { ...head(6, 'second rendering', { op: 'replace', startSeq: 2, endSeq: 2 }), time: 1 },
+    ])
+
+    // A replacement re-baselines the head, and the copy has nothing to
+    // re-baseline: the head it shadowed is gone, so its range points nowhere.
+    expect(selected.filter((event) => event.type === 'system/message')).toHaveLength(1)
+    expect(selected.findIndex((event) => event.type === 'system/message')).toBe(2)
+  })
+
+  it('travels an empty head when the source has surface nodes and none', () => {
+    // A session whose head was compacted away still needs one: the reader's
+    // next turn renders a prompt and appends it, which the format refuses when
+    // a surface node already sits at position 0.
+    const selected = selectEvents(opening().filter((event) => event.type !== 'system/message'))
+
+    const found = selected.find((event) => event.type === 'system/message')
+    expect(selected[2]?.type).toBe('system/message')
+    expect(selected[0]?.type).toBe('turn/start')
+    expect(selected[1]?.type).toBe('step/start')
+    // Coordinates from the step it opens in, which is what the format checks.
+    expect(found?.data).toMatchObject({ turn: 1, step: 1 })
+    expect((found?.data as { message?: { content?: unknown } } | undefined)?.message?.content).toEqual([])
+  })
+
+  it('leaves a session with no surface nodes alone', () => {
+    // Nothing to protect: the reader's first turn appends the first head, and
+    // a node this module invented would have to be replaced by that prompt.
+    const selected = selectEvents([
+      { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
+      { type: 'session/title', seq: 1, time: 1, data: { title: 'Renamed', messageSeqs: [], source: { kind: 'user' } } },
+    ])
+
+    expect(selected.map((event) => event.type)).toEqual(['turn/start', 'session/title'])
+  })
+})
+
+describe('a compaction checkpoint', () => {
+  it('travels as an append, because its compaction did not', () => {
+    // `compact-checkpoint` is a user/message whose surfaceOp replaces the span
+    // its summary condensed. The summary is local state and does not travel, so
+    // the range has no meaning here — and the format additionally requires the
+    // checkpoint's owning compaction/start, which is local state too.
+    const selected = selectEvents([
+      { type: 'compaction/start', seq: 0, time: 1, data: {} },
+      { type: 'compaction/summary', seq: 1, time: 1, data: {} },
+      { type: 'user/message', seq: 2, time: 1, data: { source: { kind: 'compact-checkpoint' } }, surfaceOp: { op: 'replace', startSeq: 0, endSeq: 1 }, sourceEventSeqs: [0, 1] },
+    ])
+
+    expect(selected.map((event) => event.type)).toEqual(['user/message'])
+    expect(selected[0]?.surfaceOp).toBe('append')
+    expect(selected[0]?.sourceEventSeqs).toBeUndefined()
+  })
+
+  it('leaves an ordinary message replacement alone', () => {
+    // The forced append is for checkpoints only: any other replace keeps its
+    // range when the range survives, and degrades to append otherwise.
+    const selected = selectEvents([
+      { type: 'user/message', seq: 0, time: 1, data: { source: { kind: 'user' } }, surfaceOp: 'append' },
+      { type: 'user/message', seq: 1, time: 1, data: { source: { kind: 'user' } }, surfaceOp: { op: 'replace', startSeq: 0, endSeq: 0 }, sourceEventSeqs: [0] },
+    ])
+
+    expect(selected[1]?.surfaceOp).toEqual({ op: 'replace', startSeq: 0, endSeq: 0 })
+  })
+})
+
 describe('session/title', () => {
   it('travels with its cited human message renumbered', () => {
     const selected = selectEvents([

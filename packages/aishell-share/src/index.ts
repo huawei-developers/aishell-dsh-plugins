@@ -217,10 +217,10 @@ export function apply(ctx: Context, config: Config): void {
       materializeCreateHeader(header)
       validateStoredEvents(header, events as never)
       const batch = materializeAppendBatch(events as never)
-      // The one point where cancelling leaves nothing behind. Measured on the
-      // JSONL backend: `create` alone does not materialize, so closing it
-      // writes no file; once `append` resolves the log is durable and there is
-      // no delete in the persistence contract to take it back.
+      // The one point where cancelling leaves nothing behind. `create` alone
+      // does not materialize on the JSONL backend, so closing it writes no file;
+      // once `append` resolves the log is durable and there is no delete in the
+      // persistence contract to take it back.
       if (signal.aborted) return undefined
 
       const handle = await ctx.sessionPersistence.create(header, { signal })

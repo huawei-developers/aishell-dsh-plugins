@@ -8,22 +8,22 @@
  *
  * ## Why the cut cannot be at the message
  *
- * Measured on a real log, one Turn interleaves its messages with its steps:
+ * One Turn interleaves its messages with its steps:
  *
  * ```
- * seq  7  step/start
- * seq  9  user/message
- * seq 18  assistant/message      ← the message the reader clicked
- * seq 19  tool/call
- * seq 20  tool/result
- * seq 21  step/end
- * seq 35  turn/end
+ * step/start
+ * user/message
+ * assistant/message      ← the message the reader clicked
+ * tool/call
+ * tool/result
+ * step/end
+ * turn/end
  * ```
  *
- * Cutting at 18 leaves `step/start` without its `step/end`, drops the tool
- * events the message refers to, and fails `validateStoredEvents` — the copy
- * would be rejected on import rather than truncated. Cutting at 35 keeps every
- * pairing the log requires.
+ * Cutting at the message leaves `step/start` without its `step/end`, drops the
+ * tool events the message refers to, and fails `validateStoredEvents` — the copy
+ * would be rejected on import rather than truncated. Cutting at the `turn/end`
+ * keeps every pairing the log requires.
  *
  * ## Where the boundary is found
  *
@@ -74,9 +74,9 @@ function messageIdOf(event: LoggedEvent): string | undefined {
  * Read the turn number an event belongs to.
  *
  * Most events name it in `data.turn`, but `user/message` does not: its payload
- * is the message alone — `{ content, source, role, id }`, measured on a real
- * log. A user message belongs to whichever Turn is open where it sits, so the
- * number is read from the `turn/start` that precedes it.
+ * is the message alone — `{ content, source, role, id }`. A user message belongs
+ * to whichever Turn is open where it sits, so the number is read from the
+ * `turn/start` that precedes it.
  *
  * @param event - one log entry.
  * @param preceding - the events before it, in ascending seq order.

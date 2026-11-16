@@ -29,9 +29,9 @@ export interface SharePackage {
  * positions in the source log, and the copy renumbers. Selection translates
  * them to positions in `events`, so the package is self-consistent — an
  * importer reads `sourceEventSeqs: [3]` as "the fourth event here", not as
- * "seq 3 of a log it cannot see". Measured on a real log, skipping this makes
- * every copy of a conversation that used a tool fail validation:
- * `sourceEventSeqs must reference earlier events: 19 >= current seq 8`.
+ * "seq 3 of a log it cannot see". Leaving them untranslated makes every copy of
+ * a conversation that used a tool fail validation, with the log's own
+ * ordering rule reporting a citation of an event that has not arrived yet.
  */
 export interface ShareEvent {
   readonly type: string
@@ -44,19 +44,25 @@ export interface ShareEvent {
 /**
  * The event types that make a conversation.
  *
- * A session log carries 62 known types; the rest describe one machine's local
- * state — compaction, approvals, jobs, subagents, hooks, telemetry,
- * working-directory changes — and none of them can be replayed elsewhere.
+ * The known types a session log can carry are mostly not conversation: they
+ * describe one machine's local state — compaction, approvals, jobs, subagents,
+ * hooks, telemetry, working-directory changes — and none of them can be
+ * replayed elsewhere.
  *
  * `session/title` travels because it is the conversation's name: without it a
  * copy is labelled by its directory like every other unnamed session, and a
  * reader who imports three conversations sees three identical rows.
+ *
+ * `system/message` travels for a reason of its own, stated in
+ * {@link selectEvents}: the copy cannot be continued without one.
  */
 const CONVERSATION_EVENTS: ReadonlySet<string> = new Set([
   // Messages and their content.
   'user/message',
   'assistant/message',
   'tool/result',
+  // The surface head — the one event that travels in a reduced shape.
+  'system/message',
   // The invocation a tool result answers. Dropping it leaves a dangling callId.
   'tool/call',
   // Turn and step boundaries, which are what replay walks.
@@ -88,21 +94,61 @@ interface StoredEvent {
 /**
  * Rewrite one event's seq references to positions in the carried list.
  *
+ * Two kinds of event travel in a different shape than they were stored, and both
+ * are the same requirement: the copy has to be a session DSH can keep writing to,
+ * and the format states its rules about the surface over positions rather than
+ * over content. See {@link selectEvents} for why the head exists at all.
+ *
+ * **The head travels with its content emptied.** The blocks are the rendered
+ * prompt this machine assembled; the reader's copy has no use for them, and
+ * carrying them would put one deployment's system prompt into another's session.
+ * The envelope stays because the format validates the turn, step, role and id.
+ *
+ * **A compaction checkpoint travels as an append.** `compact-checkpoint` is a
+ * `user/message` whose `surfaceOp` replaces the span its summary condensed. The
+ * summary is local state and did not travel, so the range is meaningless here —
+ * as it is for every other non-surviving range, which {@link remapSurfaceOp}
+ * already degrades to `append`. Forced here as well because that fallback is not
+ * enough: the format also requires the checkpoint's owning `compaction/start`,
+ * exactly the local event that did not travel. Carried as a replace, a checkpoint
+ * fails `compaction checkpoint has no matching compaction/start`.
+ *
  * @param event - the stored event.
  * @param renumber - source seq → position in the selection.
  * @param at - this event's position in the selection.
  * @returns the event as it travels.
  */
 function carried(event: StoredEvent, renumber: ReadonlyMap<number, number>, at: number): ShareEvent {
-  const surfaceOp = remapSurfaceOp(event.surfaceOp, renumber, at)
-  const sourceEventSeqs = remapSourceSeqs(event.sourceEventSeqs, renumber, at)
+  const checkpoint = event.type === 'user/message' && messageSourceKind(event.data) === 'compact-checkpoint'
+  const surfaceOp = checkpoint ? 'append' : remapSurfaceOp(event.surfaceOp, renumber, at)
+  const sourceEventSeqs = checkpoint ? undefined : remapSourceSeqs(event.sourceEventSeqs, renumber, at)
   return {
     type: event.type,
-    data: event.type === 'session/title' ? rebasedTitle(event.data, renumber, at) : event.data,
+    data: event.type === 'system/message'
+      ? blankedHead(event.data)
+      : event.type === 'session/title' ? rebasedTitle(event.data, renumber, at) : event.data,
     ...surfaceOp === undefined ? {} : { surfaceOp },
     ...sourceEventSeqs === undefined ? {} : { sourceEventSeqs },
     ...event.ignorable === undefined ? {} : { ignorable: event.ignorable },
   }
+}
+
+/**
+ * Empty a system message's content, keeping the envelope the format reads.
+ *
+ * An empty content array is how a head holds a surface position without
+ * projecting a message — `deriveEventMessage` returns null for one — so nothing
+ * this module carries can reach the model as if it were part of the
+ * conversation.
+ *
+ * @param data - a `system/message` event's data.
+ * @returns the same envelope with no content.
+ */
+function blankedHead(data: unknown): unknown {
+  if (typeof data !== 'object' || data === null) return data
+  const record = data as { readonly message?: unknown }
+  if (typeof record.message !== 'object' || record.message === null) return data
+  return { ...record, message: { ...(record.message as Record<string, unknown>), content: [] } }
 }
 
 /**
@@ -190,26 +236,116 @@ function remapSourceSeqs(
  * from. Numbering first and dropping afterwards would leave every later
  * reference pointing one position early.
  *
+ * The surface head is handled before numbering. The format protects a session's
+ * first surface node: once any surface node exists, a later `system/message` may
+ * only appear as a replace of that head. A copy therefore has to *have* a head,
+ * or it is a session that can be read once and never written to again — an
+ * import without one passes, then the reader's next turn renders a prompt, finds
+ * no system node to put it in, appends one, and the log is refused by
+ * `system/message requires a protected first surface head`.
+ *
+ * So exactly one `system/message` travels, and it is the source's first
+ * (`append`) head: a later one re-baselines the head, and a copy has nothing to
+ * re-baseline. A source with surface nodes but no head at all — a session whose
+ * head was compacted away — gets an empty one from {@link withSyntheticHead}.
+ *
  * @param events - the source session's log.
  * @returns the events that travel, in their original order.
  */
 export function selectEvents(events: readonly StoredEvent[]): ShareEvent[] {
-  const kept = events
-    .map((event, index) => ({ event, seq: event.seq ?? index }))
-    .filter(({ event }) => carriesConversation(event.type))
+  const ordered = events.map((event, index) => ({ event, seq: event.seq ?? index }))
+  const firstHead = ordered.find(({ event }) => event.type === 'system/message' && event.surfaceOp === 'append')
 
+  const kept = ordered
+    .filter(({ event }) => carriesConversation(event.type))
+    .filter(({ event }) => event.type !== 'system/message' || event === firstHead?.event)
+
+  // Read once: a title filter that recomputed this would walk the kept list per
+  // title event.
+  const humanMessages = humanMessagesOf(kept)
+  const travelling = kept.filter(({ event }) => event.type !== 'session/title' || titleSurvives(event.data, humanMessages))
+
+  // Always called, not branched on `firstHead`: the guard below is the one
+  // statement of when a head is missing, so a caller cannot disagree with it.
+  const withHead = withSyntheticHead(travelling)
+
+  const renumber = new Map<number, number>()
+  withHead.forEach((entry, position) => {
+    if (entry.seq !== undefined) renumber.set(entry.seq, position)
+  })
+
+  return withHead.map(({ event }, position) => carried(event, renumber, position))
+}
+
+/** One travelling event, with the source position it came from. */
+interface Travelling {
+  readonly event: StoredEvent
+  /** Absent for an event this module adds rather than carries. */
+  readonly seq?: number
+}
+
+/**
+ * The source seqs of the human messages that travel.
+ *
+ * @param kept - the events selected so far.
+ * @returns the seqs of the `user/message` events a person wrote.
+ */
+function humanMessagesOf(kept: readonly { readonly event: StoredEvent, readonly seq: number }[]): ReadonlySet<number> {
   const humanMessages = new Set<number>()
   for (const { event, seq } of kept) {
     if (event.type !== 'user/message') continue
     if (messageSourceKind(event.data) === 'user') humanMessages.add(seq)
   }
+  return humanMessages
+}
 
-  const travelling = kept.filter(({ event }) => event.type !== 'session/title' || titleSurvives(event.data, humanMessages))
+/** Surface types, in the order the head can precede them. */
+const SURFACE_EVENTS: ReadonlySet<string> = new Set([
+  'user/message',
+  'assistant/message',
+  'tool/result',
+])
 
-  const renumber = new Map<number, number>()
-  travelling.forEach(({ seq }, position) => { renumber.set(seq, position) })
-
-  return travelling.map(({ event }, position) => carried(event, renumber, position))
+/**
+ * Add an empty head to a conversation that has surface nodes but no head.
+ *
+ * A head always sits directly after the `step/start` that opens the step it
+ * names — the format validates its turn and step against that open step, so the
+ * coordinates come from the `step/start` and a head anywhere else is rejected.
+ * The one composed here goes in the same place: after the `step/start` that opens
+ * the step holding the conversation's first surface node, which is where the
+ * sender's own head sat.
+ *
+ * Empty rather than a placeholder sentence: an empty content array is how a
+ * head holds a position without projecting a message, so nothing this module
+ * invents can reach the model as if a person had said it.
+ *
+ * @param travelling - the events selected so far, in log order.
+ * @returns the same list, with one head inserted when one is needed.
+ */
+function withSyntheticHead(travelling: readonly Travelling[]): Travelling[] {
+  if (travelling.some(({ event }) => event.type === 'system/message')) return [...travelling]
+  const firstSurface = travelling.findIndex(({ event }) => SURFACE_EVENTS.has(event.type))
+  if (firstSurface === -1) return [...travelling]
+  for (let index = firstSurface - 1; index >= 0; index -= 1) {
+    const entry = travelling[index]
+    if (entry?.event.type !== 'step/start') continue
+    const step = entry.event.data as { readonly turn?: unknown, readonly step?: unknown } | undefined
+    if (typeof step?.turn !== 'number' || typeof step.step !== 'number') return [...travelling]
+    const head: StoredEvent = {
+      type: 'system/message',
+      data: {
+        turn: step.turn,
+        step: step.step,
+        message: { role: 'system', content: [], source: { kind: 'system-prompt' }, id: `share-head-${step.turn}-${step.step}` },
+      },
+      surfaceOp: 'append',
+    }
+    return [...travelling.slice(0, index + 1), { event: head }, ...travelling.slice(index + 1)]
+  }
+  // No open step to sit in means the log has no shape this can join; leaving it
+  // alone is honest, and the import's own validation is what reports it.
+  return [...travelling]
 }
 
 /**

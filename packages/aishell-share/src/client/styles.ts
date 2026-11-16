@@ -68,18 +68,56 @@ export const BUBBLE_MINE_CLASS = 'aishell-share-bubble-mine'
 /** One message the conversation returned. */
 export const BUBBLE_REPLY_CLASS = 'aishell-share-bubble-reply'
 
-/** One folded half of a tool invocation. */
-export const TOOL_CHIP_CLASS = 'aishell-share-tool-chip'
+/** One Turn's work, folded. */
+export const TURN_CLASS = 'aishell-share-turn'
 
 /**
- * The variant on a tool result the tool itself reported as an error.
+ * The fold's header: a chevron and a one-line label.
  *
- * The chip keeps its shape and gains only the error colour: an error is the
- * same kind of thing as a success — one tool's answer — and drawing it as a
- * different piece of furniture would say the conversation had changed rather
- * than the outcome.
+ * No border and no background. This sits inside the transcript, and a card
+ * around it would compete with the conversation it is part of; the shell's own
+ * process rows are drawn the same way.
  */
-export const TOOL_CHIP_ERROR_CLASS = 'aishell-share-tool-chip-error'
+export const TURN_HEADER_CLASS = 'aishell-share-turn-header'
+
+/** The chevron that turns when the fold opens. */
+export const TURN_CHEVRON_CLASS = 'aishell-share-turn-chevron'
+
+/** The Turn's answer, below the fold. */
+export const TURN_ANSWER_CLASS = 'aishell-share-turn-answer'
+
+/**
+ * The expanded steps.
+ *
+ * A bordered region, unlike the header: what it holds is commands and their
+ * output, which is a different kind of text from the prose above and needs its
+ * own ground to be readable as one block.
+ */
+export const TURN_BODY_CLASS = 'aishell-share-turn-body'
+
+/** A model message inside a Turn. */
+export const STEP_MESSAGE_CLASS = 'aishell-share-step-message'
+
+/** One step's invocation and outcome. */
+export const STEP_TOOL_CLASS = 'aishell-share-step-tool'
+
+/** The call: the tool's name and the arguments it was given. */
+export const STEP_CALL_CLASS = 'aishell-share-step-call'
+
+/**
+ * What the tool returned.
+ *
+ * Rendered as a `pre` so the line breaks the tool wrote survive; a tool's
+ * output is formatted text, and reflowing it would destroy the thing a reader
+ * is trying to read.
+ */
+export const STEP_RESULT_CLASS = 'aishell-share-step-result'
+
+/** The variant on a result the tool reported as an error. */
+export const STEP_RESULT_ERROR_CLASS = 'aishell-share-step-result-error'
+
+/** The placeholder for a call whose result the package does not carry. */
+export const STEP_NO_RESULT_CLASS = 'aishell-share-step-no-result'
 
 /** The workspace list the import asks into. */
 export const WORKSPACE_LIST_CLASS = 'aishell-share-workspaces'
@@ -223,27 +261,121 @@ const CSS = `
   border-bottom-left-radius: var(--dsw-radius-xs);
 }
 
-.${TOOL_CHIP_CLASS} {
-  align-self: flex-start;
-  max-width: 84%;
-  padding: 2px 8px;
-  border-radius: var(--dsw-radius-sm);
-  background: var(--dsw-alias-settings-card-fill);
-  border: 1px solid var(--dsw-alias-border-l2);
-  font: 11px/1.6 "SF Mono", "JetBrains Mono", Consolas, monospace;
-  color: var(--dsw-alias-label-tertiary);
-  overflow-wrap: anywhere;
-  /* A tool can return a paragraph, and an unbounded chip would take the whole
-     box. Three lines is enough to recognise the answer; the rest is history. */
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+/* ── A Turn's work ──────────────────────────────────────────────────────── */
+
+.${TURN_CLASS} {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
 }
 
-.${TOOL_CHIP_ERROR_CLASS} {
+.${TURN_HEADER_CLASS} {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  line-height: 24px;
+  /* Secondary, not tertiary: 13px at 3.71:1 misses AA, and this is the only
+     line telling a reader there is work to open. Hover lifts it to primary. */
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  text-align: left;
+}
+
+/* The row states come from the token layer, so the fold reads as a control
+   without needing a box to look like one. */
+@media (hover: hover) {
+  .${TURN_HEADER_CLASS}:hover {
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+.${TURN_HEADER_CLASS}:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+  border-radius: var(--dsw-radius-xs);
+}
+
+.${TURN_CHEVRON_CLASS} {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+/* The answer, drawn where a reply belongs. It reuses the reply's type but not
+   its align-self: inside the Turn's column that property is the horizontal
+   axis, so flex-start would leave the answer centred under the fold instead of
+   flush with every other reply. */
+.${TURN_ANSWER_CLASS} {
+  align-self: stretch;
+  max-width: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.${TURN_BODY_CLASS} {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-settings-card-fill);
+  /* Its own scroll when a tool returned screens of output: the transcript
+     keeps scrolling as a whole, and one step cannot push the rest off it. */
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.${STEP_MESSAGE_CLASS} {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--dsw-alias-label-primary);
+}
+
+.${STEP_TOOL_CLASS} {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.${STEP_CALL_CLASS} {
+  font: 12px/1.6 "SF Mono", "JetBrains Mono", Consolas, monospace;
+  /* Secondary rather than tertiary: this is the line a reader scans to know
+     what the Turn did, so it has to clear AA at 12px on the card's ground. */
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+}
+
+.${STEP_RESULT_CLASS} {
+  margin: 0;
+  font: 12px/1.6 "SF Mono", "JetBrains Mono", Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--dsw-alias-label-primary);
+}
+
+.${STEP_RESULT_ERROR_CLASS} {
   color: var(--dsw-alias-state-error-primary);
-  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.${STEP_NO_RESULT_CLASS} {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+  font-style: italic;
 }
 
 /* ── Choosing a workspace ───────────────────────────────────────────────── */

@@ -64,6 +64,10 @@ export const zh = {
   'import.browse': '选择其他文件夹…',
   'import.importing': '正在导入',
   'import.empty': '这个会话没有可显示的对话内容。',
+  // The fold's header. `count` is how many tool calls the Turn made, so the
+  // line says what happened rather than naming the mechanism.
+  'import.worked': '调用了 {count} 次工具',
+  'import.noResult': '没有返回结果',
   'dialog.import': '导入到本地',
 
   // Failures, one key per reason the Host can report.
@@ -113,6 +117,8 @@ export const en = {
   'import.browse': 'Choose another folder…',
   'import.importing': 'Importing',
   'import.empty': 'This conversation has no messages to show.',
+  'import.worked': 'Used {count} tools',
+  'import.noResult': 'No result',
   'dialog.import': 'Import',
 
   'failure.share.rejected': 'This conversation’s contents could not be shared.',

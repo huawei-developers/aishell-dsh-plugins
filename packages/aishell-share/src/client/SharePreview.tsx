@@ -27,6 +27,8 @@
 
 import {
   Button,
+  IconChevronDownOutlineRegular,
+  IconChevronUpOutlineRegular,
   IconCopyOutlineRegular,
   IconFolderCloseRegular,
   IconLinkOutlineRegular,
@@ -45,7 +47,7 @@ import type { AishellShareLocaleKey } from './locales.ts'
 import type { ShareMachine } from './machine.ts'
 import type { SharePackage } from '../package.ts'
 import type { ServiceFailure } from '../service.ts'
-import { previewLines, type PreviewLine } from './preview.ts'
+import { previewItems, type PreviewItem, type PreviewStep, type PreviewTurn } from './preview.ts'
 import { isOpen, flowOf, type ShareState, type WorkspaceChoice } from './state.ts'
 import {
   BUBBLE_MINE_CLASS,
@@ -54,8 +56,17 @@ import {
   LINK_CLASS,
   LINK_COPY_CLASS,
   LINK_TEXT_CLASS,
-  TOOL_CHIP_CLASS,
-  TOOL_CHIP_ERROR_CLASS,
+  STEP_CALL_CLASS,
+  STEP_MESSAGE_CLASS,
+  STEP_NO_RESULT_CLASS,
+  STEP_RESULT_CLASS,
+  STEP_RESULT_ERROR_CLASS,
+  STEP_TOOL_CLASS,
+  TURN_ANSWER_CLASS,
+  TURN_BODY_CLASS,
+  TURN_CHEVRON_CLASS,
+  TURN_CLASS,
+  TURN_HEADER_CLASS,
   TRANSCRIPT_CLASS,
   WORKSPACE_HINT_CLASS,
   WORKSPACE_ICON_CLASS,
@@ -435,7 +446,7 @@ function bodyFor(
     case 'fetching':
       return <Dial label={t('import.loading')} />
     case 'preview':
-      return <Conversation session={state.session} emptyLabel={t('import.empty')} />
+      return <Conversation session={state.session} emptyLabel={t('import.empty')} t={t} />
     case 'choose-workspace':
       return (
         <Workspaces
@@ -535,8 +546,13 @@ function LinkBox(
  * The conversation, as a reader sees it.
  *
  * The reader's own turns sit right and filled; the assistant's sit left as plain
- * text. A tool call and its result are one folded chip each, on the left with
- * the assistant: they are what the assistant did.
+ * text. A Turn that used tools is one fold: collapsed it is a line saying how
+ * many steps ran, expanded it is the sequence — the model's message, then each
+ * call with what it returned.
+ *
+ * That is what the shell's own transcript does, and it is the same decision
+ * rather than a second one: the steps are what a Turn *did*, and putting them
+ * in the reading position turns a conversation into a log.
  *
  * @param session - the package being previewed.
  * @param emptyLabel - copy for a package with no readable messages.
@@ -544,46 +560,139 @@ function LinkBox(
  * @returns the conversation.
  */
 function Conversation(
-  { session, emptyLabel }: {
+  { session, emptyLabel, t }: {
     readonly session: SharePackage
     readonly emptyLabel: string
+    readonly t: SharePreviewProps['t']
   },
 ): ReactElement {
-  const lines = previewLines(session)
+  const items = previewItems(session)
   return (
     <div style={conversationColumn}>
       <p style={conversationTitle}>{session.title}</p>
       <div className={TRANSCRIPT_CLASS}>
-        {lines.length === 0
+        {items.length === 0
           ? <p style={paragraph}>{emptyLabel}</p>
-          : lines.map((line) => <Bubble key={line.at} line={line} />)}
+          : items.map((item) => <Item key={item.at} item={item} t={t} />)}
       </div>
     </div>
   )
 }
 
 /**
- * One line of the preview, drawn for the side it came from.
+ * One item of the transcript.
  *
- * A tool call and its result share one chip. They are the two halves of a
- * single invocation, and giving them different furniture would say the
- * conversation changed rather than the outcome did; the error colour is what
- * marks a result the tool reported as a failure.
- *
- * @param line - the line to draw.
- * @returns the bubble or the tool chip.
+ * @param item - the item to draw.
+ * @param t - the translator.
+ * @returns a bubble, or the fold standing for one Turn's work.
  */
-function Bubble({ line }: { readonly line: PreviewLine }): ReactElement {
-  if (line.role === 'tool-call' || line.role === 'tool-result') {
-    return (
-      <span className={line.isError === true ? `${TOOL_CHIP_CLASS} ${TOOL_CHIP_ERROR_CLASS}` : TOOL_CHIP_CLASS}>
-        {line.text}
-      </span>
-    )
-  }
+function Item({ item, t }: { readonly item: PreviewItem, readonly t: SharePreviewProps['t'] }): ReactElement {
+  if (item.kind === 'turn') return <TurnFold turn={item} t={t} />
   return (
-    <div className={line.role === 'user' ? BUBBLE_MINE_CLASS : BUBBLE_REPLY_CLASS}>
-      {line.text}
+    <div className={item.kind === 'user' ? BUBBLE_MINE_CLASS : BUBBLE_REPLY_CLASS}>
+      {item.text}
+    </div>
+  )
+}
+
+/**
+ * One Turn: the work it did, folded, and what it concluded, not folded.
+ *
+ * ## Why the answer sits outside the fold
+ *
+ * A Turn ends by answering, and the answer is what a reader came to read. Inside
+ * a fold it would be hidden by default — the card would show a conversation in
+ * which the model asks and confirms and never concludes, which is the opposite
+ * of what the preview is for.
+ *
+ * So the fold holds only the work that produced the answer: the calls, their
+ * output, and the model's narration along the way. The answer follows it, at the
+ * reading position, in the same type as any other reply. This is the split the
+ * shell's own transcript makes, for the same reason.
+ *
+ * ## The header
+ *
+ * A chevron that turns on open, a one-line label, and no box around it — this
+ * row sits inside the transcript, and a bordered card would compete with the
+ * conversation it is part of. The body is bordered because what it holds is
+ * commands and their output, a different kind of text that needs its own ground.
+ *
+ * @param turn - the Turn: its steps, and the answer they led to.
+ * @param t - the translator.
+ * @returns the fold, and the answer below it.
+ */
+function TurnFold({ turn, t }: {
+  readonly turn: PreviewTurn
+  readonly t: SharePreviewProps['t']
+}): ReactElement {
+  const [open, setOpen] = useState(false)
+  const toolCount = turn.steps.filter((step) => step.kind === 'tool').length
+  return (
+    <div className={TURN_CLASS}>
+      <button
+        type="button"
+        className={TURN_HEADER_CLASS}
+        onClick={() => { setOpen((value) => !value) }}
+        aria-expanded={open}
+      >
+        <span className={TURN_CHEVRON_CLASS} aria-hidden>
+          {open ? <IconChevronUpOutlineRegular size={14} /> : <IconChevronDownOutlineRegular size={14} />}
+        </span>
+        <span>{t('import.worked', { count: toolCount })}</span>
+      </button>
+      {open && (
+        <div className={TURN_BODY_CLASS}>
+          {/* A step has no id of its own: the log names a tool call, not the
+              step it belongs to, and a message step carries none either. A
+              Turn's steps are appended in order and never reordered, so their
+              position is their identity. */}
+          {turn.steps.map((step, index) => <Step key={stepKey(step, index)} step={step} t={t} />)}
+        </div>
+      )}
+      {turn.answer !== undefined && <div className={TURN_ANSWER_CLASS}>{turn.answer}</div>}
+    </div>
+  )
+}
+
+/**
+ * The key for one step of a Turn.
+ *
+ * Position plus what the step is: two steps of the same Turn can both be tools,
+ * so the position alone is what separates them, and the name is what keeps a
+ * key stable if the list is ever rebuilt from the same events.
+ *
+ * @param step - the step.
+ * @param index - its position in the Turn.
+ * @returns a key unique within the Turn.
+ */
+function stepKey(step: PreviewStep, index: number): string {
+  return `${index}:${step.kind === 'tool' ? step.name : 'message'}`
+}
+
+/**
+ * One step of a Turn, drawn for what it is.
+ *
+ * The model's words stay prose; a tool is a command line and its answer. Both
+ * are monospace only where they are data, so the reader can tell at a glance
+ * which lines came from the model and which from a program.
+ *
+ * @param step - the step to draw.
+ * @param t - the translator.
+ * @returns the message or the invocation.
+ */
+function Step({ step, t }: { readonly step: PreviewStep, readonly t: SharePreviewProps['t'] }): ReactElement {
+  if (step.kind === 'message') return <p className={STEP_MESSAGE_CLASS}>{step.text}</p>
+  return (
+    <div className={STEP_TOOL_CLASS}>
+      <code className={STEP_CALL_CLASS}>
+        {step.arguments === '' ? step.name : `${step.name}(${step.arguments})`}
+      </code>
+      {step.result !== undefined && (
+        <pre className={step.isError === true ? `${STEP_RESULT_CLASS} ${STEP_RESULT_ERROR_CLASS}` : STEP_RESULT_CLASS}>
+          {step.result}
+        </pre>
+      )}
+      {step.result === undefined && <span className={STEP_NO_RESULT_CLASS}>{t('import.noResult')}</span>}
     </div>
   )
 }

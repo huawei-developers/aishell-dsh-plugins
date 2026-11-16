@@ -91,6 +91,25 @@ Which one to name depends on what the user is reporting: a bad single answer is 
 
 What a submission sends is worth stating when a user asks about privacy: it replays the complete unhandled session prefix — the conversation text, tool arguments and results, the system prompt, and the working directory — to AI Shell's collector, not only the note the user typed. The dialog discloses this before submitting.
 
+## Sharing and importing conversations
+
+A conversation can be sent to someone else as a link, and a link can be brought in as a conversation on this machine.
+
+**Sharing.** Two controls start it:
+
+- **A session's ⋯ menu in the sidebar** — "Share session" (分享会话). Shares the whole conversation.
+- **The action row under a reply** — "Share conversation so far" (分享以上对话). Shares it only through that reply's Turn.
+
+Both ask before sending, and what the dialog describes going out is what goes out — the conversation, its tool calls and their results. Sending produces a link with "Copy link" (复制链接).
+
+A share started from a reply stops at the end of that reply's Turn, so it can be shorter than expected. Everything means the sidebar row.
+
+**Importing.** A link that arrives opens the import dialog by itself. To paste one without a link, open a Workspace's ⋯ menu in the sidebar and choose "Import conversation" (导入会话).
+
+The dialog previews the conversation before anything is written, then asks which Workspace to file it under. Started from a Workspace's menu, that question is already answered.
+
+The imported copy is an ordinary session: it sits in the sidebar under that Workspace and opens like any other.
+
 ## The permission mode
 
 Huawei Cloud work runs under one of two modes.

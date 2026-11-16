@@ -197,6 +197,47 @@ describe('aishell-handbook — the text', () => {
     expect(HANDBOOK).toMatch(/one message/)
   })
 
+  it('names the share entry points the shell actually renders', () => {
+    // Pinned to the labels `aishell-share` registers: a session's ⋯ menu row,
+    // and the action row under a reply. A made-up control is the failure this
+    // section exists to prevent.
+    expect(HANDBOOK).toContain('Share session')
+    expect(HANDBOOK).toContain('分享会话')
+    expect(HANDBOOK).toContain('Share conversation so far')
+    expect(HANDBOOK).toContain('分享以上对话')
+    expect(HANDBOOK).toContain('Copy link')
+  })
+
+  it('says what each share entry point cuts', () => {
+    // The two do not share the same package, and a user who wonders why a link
+    // stops early is asking exactly this.
+    expect(HANDBOOK).toMatch(/Shares the whole conversation/)
+    expect(HANDBOOK).toMatch(/only through that reply's Turn/)
+  })
+
+  it('does not describe the package internals', () => {
+    // This section answers "where is the button", not "how is a package
+    // serialized". Event names and transport detail belong in the design
+    // document, and a reply that recites them tells the user nothing they can
+    // act on.
+    expect(HANDBOOK).not.toMatch(/event type/)
+    expect(HANDBOOK).not.toMatch(/serializ/)
+  })
+
+  it('names where an import starts, and that a link opens it by itself', () => {
+    // `requestImport` from a Workspace's menu, and the deeplink claim for a link
+    // that arrives. A user paste searching for an import button needs the menu.
+    expect(HANDBOOK).toContain('Import conversation')
+    expect(HANDBOOK).toContain('导入会话')
+    expect(HANDBOOK).toMatch(/opens the import dialog by itself/)
+  })
+
+  it('says an import from a Workspace skips the directory question', () => {
+    // The one behavioural difference between the two ways in, and the reason a
+    // reader who came from a menu sees a shorter flow.
+    expect(HANDBOOK).toMatch(/that question is already answered/)
+  })
+
   it('names both permission modes and where the switch lives', () => {
     expect(HANDBOOK).toContain('Read-only')
     expect(HANDBOOK).toContain('Read-write')

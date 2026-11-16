@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yusheng-g/aishell-dsh-plugins.git",
+    "url": "git+https://github.com/huawei-developers/aishell-dsh-plugins.git",
     "directory": "packages/aishell-deeplink"
   },
   "type": "module",

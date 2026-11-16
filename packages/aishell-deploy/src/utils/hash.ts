@@ -24,16 +24,27 @@ import { join } from "node:path";
 
 import { configurationFiles } from "../hcl.ts";
 
+/**
+ * Hash a deployment's configuration files.
+ *
+ * The reads run together: a deployment is a handful of files whose sizes are
+ * independent, and hashing them one at a time made the wait their sum. The
+ * digest itself is unchanged — each file is hashed on its own and the parts are
+ * concatenated in path order, so concurrency only changes when the bytes are
+ * read, never how they are combined.
+ *
+ * @param dir - the deployment directory.
+ * @returns the `sha256:` digest of its configuration.
+ */
 export async function computeTfHash(dir: string): Promise<string> {
   const tfFiles = await configurationFiles(dir);
 
-  const parts: string[] = [];
-  for (const name of tfFiles) {
+  const parts = await Promise.all(tfFiles.map(async (name) => {
     const content = await readFile(join(dir, name), "utf8");
-    const h = createHash("sha256").update(content, "utf8").digest("hex");
-    parts.push(`${name}${h}`);
-  }
-  const concatenated = parts.join("");
-  const hash = createHash("sha256").update(concatenated, "utf8").digest("hex");
+    return `${name}${createHash("sha256").update(content, "utf8").digest("hex")}`;
+  }));
+  // Concatenation stays in `tfFiles` order because `Promise.all` preserves
+  // input order, which is what keeps the digest stable across runs.
+  const hash = createHash("sha256").update(parts.join(""), "utf8").digest("hex");
   return `sha256:${hash}`;
 }

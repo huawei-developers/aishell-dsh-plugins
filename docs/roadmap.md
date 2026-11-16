@@ -28,7 +28,14 @@ inside AI Shell.
 Connections to Huawei Cloud resources such as RDS, DMQ, and CCE, so the agent
 can reach them without the user arranging the network and permissions.
 
-*Provisional package: `aishell-dsh-huaweicloud-connector`.*
+*Provisional package: `aishell-dsh-huaweicloud-connector`. Design in progress.*
+
+### Redaction
+
+Redaction of sensitive information, so what leaves the machine or reaches the
+model carries no secret.
+
+*Provisional package: `aishell-dsh-redact`. Design in progress.*
 
 ## Exploring
 

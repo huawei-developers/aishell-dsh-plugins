@@ -1,7 +1,7 @@
 {
   "name": "@huaweidevtools/aishell-dsh-deeplink",
   "description": "Deep-link transport for DSH — routes aishell:// URLs to the plugin that claims them",
-  "version": "0.0.27",
+  "version": "0.0.28",
   "publishConfig": {
     "access": "public"
   },

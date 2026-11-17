@@ -1,7 +1,7 @@
 {
   "name": "@huaweidevtools/aishell-dsh-base",
   "description": "aishell DSH profile base layer — aggregates aishell plugin packages over dsh-base",
-  "version": "0.0.33",
+  "version": "0.0.34",
   "publishConfig": {
     "access": "public"
   },

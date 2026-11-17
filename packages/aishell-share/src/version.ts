@@ -15,4 +15,4 @@
  */
 
 /** This build's version, as stamped from the package manifest. */
-export const VERSION = '0.0.32'
+export const VERSION = '0.0.33'

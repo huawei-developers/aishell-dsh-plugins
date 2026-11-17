@@ -983,15 +983,25 @@ export function apply(ctx: Context, config: Config): void {
   // keyring every minute, and the first write can land after this plugin
   // started — surfaces in the UI within the next tick, without a restart.
   //
-  // Steady state costs one keyring read per tick (the bundle), measured at
-  // ~13ms on a Linux KWallet host — not the microseconds a "kernel syscall"
-  // figure would suggest, because `KeyringBackend` builds a fresh `Entry` per
-  // call and that construction dominates the read. It is a synchronous API, so
-  // the tick blocks the event loop. ~13ms every 30s is negligible and worth the
-  // staleness it removes, but it is not free: raising this frequency is not a
-  // cheap knob.
+  // What a tick costs. Steady state is one store read, and the backends reach
+  // it by different routes because what dominates a naive call is setup, not
+  // the read:
+  //
+  //   keyring       reuses one native entry per account   ~1ms
+  //   fingerprint   derives its scrypt key once           ~15µs
+  //
+  // Both caches live in `credentials-store/backends`, and both are what make a
+  // frequent tick viable: constructing an entry opens the Secret Service
+  // session, and deriving the key runs scrypt — both synchronous, so both would
+  // block the event loop rather than merely costing CPU.
+  //
+  // Twelve reads a minute is ~12ms of blocked event loop, which is the budget
+  // this interval spends. It buys the one thing the timer exists for: how
+  // quickly a credential written by another process (`aishell credentials set`,
+  // the environment's sync job) reaches the chips. Five seconds sits below the
+  // point where a person notices a delay at all.
   reconciler.reconcile()
-  const reconcileTimer = setInterval(reconciler.reconcile, 30_000)
+  const reconcileTimer = setInterval(reconciler.reconcile, 5_000)
   ctx.effect(() => () => clearInterval(reconcileTimer),
     'aishell-credentials: status reconcile timer')
 

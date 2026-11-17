@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { join } from 'node:path'
+import { clearCredentials, readStoredPair, writeHuaweiCloud } from '../src/accounts.ts'
+import { tmpdir } from 'node:os'
+import { mkdtempSync } from 'node:fs'
 import { KEYRING_SERVICE, CREDENTIALS_FILE_NAME } from '../src/scope.ts'
 
 // Mock @napi-rs/keyring via the test hook — vi.mock cannot intercept
@@ -28,7 +31,7 @@ class MockEntry {
   }
 }
 
-const { createCredentialsStore, KeyringBackend, FailoverStore, FingerprintBackend, MemoryBackend, __setKeyringModule, __resetSharedMemoryBackend, sharedMemoryBackend } = await import('../src/index.ts')
+const { createCredentialsStore, KeyringBackend, FailoverStore, FingerprintBackend, MemoryBackend, __setKeyringModule, __resetSharedMemoryBackend, sharedMemoryBackend, keyringRefused, __clearKeyringRefusal } = await import('../src/index.ts')
 
 /**
  * The backend class as a type. The destructured `KeyringBackend` above is a
@@ -39,6 +42,14 @@ type KeyringBackend = InstanceType<typeof KeyringBackend>
 
 // Inject the mock before any KeyringBackend is constructed.
 __setKeyringModule({ Entry: MockEntry })
+
+// The refusal latch is process-wide by design, so it outlives every spec that
+// raises it. A suite that did not reset it per test would see one spec's
+// refusal decide the next one's backend — the same leak the module-level mock
+// above exists to prevent, one level up.
+beforeEach(() => {
+  __clearKeyringRefusal()
+})
 
 describe('createCredentialsStore — backend selection', () => {
   beforeEach(() => {
@@ -72,9 +83,41 @@ describe('createCredentialsStore — backend selection', () => {
     })
     try {
       const s = createCredentialsStore()
-      expect(s).toBeInstanceOf(FingerprintBackend)
+      // Still a FailoverStore, with an unavailable primary: one shape for every
+      // caller, and `unavailable` tells the truth about WHY the credential is
+      // missing. Returning the bare file backend would answer "not configured"
+      // for a keychain that holds the credential and merely refused to open.
+      expect(s).toBeInstanceOf(FailoverStore)
+      expect(keyringRefused()).toBe(true)
+      expect(s.get('HW_ACCESS_KEY')).toBeUndefined()
     } finally {
       __setKeyringModule({ Entry: MockEntry })
+    }
+  })
+
+  it('does not even probe a keyring this process already refused', () => {
+    // The probe is a read, and on macOS a read of a refused keychain raises the
+    // unlock prompt. A second store in the same process must not pay that.
+    let probes = 0
+    __setKeyringModule({
+      Entry: class {
+        constructor() { probes += 1; throw new Error('denied') }
+        getPassword = (): string | null => null
+        setPassword = (): void => {}
+        deletePassword = (): void => {}
+      },
+    })
+    try {
+      createCredentialsStore()
+      const afterFirst = probes
+      // The second store must not probe. What it returns is immaterial here;
+      // what matters is that constructing it cost no keyring contact.
+      createCredentialsStore()
+      expect(probes).toBe(afterFirst)
+      expect(keyringRefused()).toBe(true)
+    } finally {
+      __setKeyringModule({ Entry: MockEntry })
+      __clearKeyringRefusal()
     }
   })
 })
@@ -178,8 +221,11 @@ describe('FailoverStore — keyring write failure (locked collection)', () => {
   it('a successful keyring write purges the fallback copy of that account', () => {
     const s1 = createCredentialsStore()
     s1.set('A', 'failover-value')
-    // Session 2: keyring now writable; the same account is stored directly.
+    // Session 2 — a NEW PROCESS. The refusal latch is process-wide, so this
+    // process would never try the keyring again; recovering is what a restart
+    // does, and clearing the latch is how a spec models one.
     writeFails = false
+    __clearKeyringRefusal()
     const s2 = createCredentialsStore()
     s2.set('A', 'keyring-value')
     // The stale failover copy is gone, so a later keyring miss reads absent
@@ -328,6 +374,193 @@ describe('KeyringBackend — get/set/delete/has', () => {
   })
 })
 
+describe('KeyringBackend — a refused keyring latches for the process', () => {
+  /**
+   * A keyring that refuses the way macOS does after a denied unlock: the read
+   * throws. The probe is the one read that succeeds, because a refusal at
+   * construction is a different case (the factory never builds this backend at
+   * all — see `createCredentialsStore`).
+   *
+   * The latch is process-wide, so every spec here starts from a cleared one and
+   * restores it afterwards: the flag outlives any single store by design, which
+   * is exactly what makes it leak between specs.
+   */
+  function refusingKeyring(): { reads: () => number } {
+    let reads = 0
+    __setKeyringModule({
+      Entry: class {
+        getPassword = (): string | null => {
+          reads += 1
+          if (reads === 1) return null
+          throw new Error('Error: User canceled the operation. (-128)')
+        }
+        setPassword = (): void => { throw new Error('Error: User canceled the operation. (-128)') }
+        deletePassword = (): void => { throw new Error('Error: User canceled the operation. (-128)') }
+      },
+    })
+    return { reads: () => reads }
+  }
+
+  beforeEach(() => {
+    __clearKeyringRefusal()
+  })
+
+  afterEach(() => {
+    __setKeyringModule({ Entry: MockEntry })
+    __clearKeyringRefusal()
+  })
+
+  it('stops reading once refused, so the unlock prompt stops recurring', () => {
+    // Why the latch exists: reconcile polls the store every few seconds, and
+    // on macOS each read of a DENIED entry re-raises the unlock prompt. Without
+    // the latch, one refusal becomes a dialog that never stops appearing.
+    const counted = refusingKeyring()
+    const ks = new KeyringBackend()
+    const afterProbe = counted.reads()
+
+    expect(ks.get('HW_ACCESS_KEY')).toBeUndefined()
+    expect(keyringRefused()).toBe(true)
+    expect(counted.reads()).toBe(afterProbe + 1)
+
+    // Every later poll answers from the latch — no keyring contact at all.
+    ks.get('HW_ACCESS_KEY')
+    ks.get('HW_ACCESS_KEY')
+    ks.has('HW_ACCESS_KEY')
+    expect(counted.reads()).toBe(afterProbe + 1)
+  })
+
+  it('latches the whole process, so a second store does not ask again', () => {
+    // Each plugin builds its own store. A latch held per instance would let the
+    // second one raise a prompt for a decision the person already made — and
+    // the construction probe is a read, so that is where it would happen.
+    const counted = refusingKeyring()
+
+    // First store discovers the refusal.
+    const first = new KeyringBackend()
+    first.get('HW_ACCESS_KEY')
+    const afterFirst = counted.reads()
+
+    // The second store's own probe is refused; the factory turns that into the
+    // file backend rather than a second prompt (`createCredentialsStore`).
+    // Given its own credentials directory so the fallback starts empty — the
+    // point here is the read count, not what the fallback holds.
+    const second = createCredentialsStore({ credentialsDir: join(tmpdir(), 'refusal-latch') })
+    expect(keyringRefused()).toBe(true)
+    expect(second.get('HW_ACCESS_KEY')).toBeUndefined()
+    // Not one more read: the factory answers from the latch and never
+    // constructs a backend, so the refused probe is not repeated.
+    expect(counted.reads()).toBe(afterFirst)
+  })
+
+  it('reports a latched keyring as unavailable rather than empty', () => {
+    // The distinction the interface carries: "nothing stored" invites the
+    // person to type a credential in, which would overwrite the one still
+    // sitting in a locked keychain.
+    refusingKeyring()
+    const ks = new KeyringBackend()
+    expect(keyringRefused()).toBe(false)
+    ks.get('HW_ACCESS_KEY')
+    expect(keyringRefused()).toBe(true)
+  })
+
+  it('refuses writes after a latch instead of silently accepting them', () => {
+    // A quiet success would make FailoverStore believe the value landed and
+    // skip its fallback, losing the save.
+    refusingKeyring()
+    const ks = new KeyringBackend()
+    ks.get('HW_ACCESS_KEY')
+
+    expect(() => { ks.set('HW_ACCESS_KEY', 'v') }).toThrow(/not being asked again/)
+    expect(() => { ks.delete('HW_ACCESS_KEY') }).toThrow(/not being asked again/)
+  })
+
+  it('latches on a refused WRITE too, so a later store does not re-probe', () => {
+    // The shape this covers: a keychain unlocked enough to READ but not to
+    // WRITE. A save fails, failover writes the file, and without latching the
+    // write the next store in this process probes the keyring again — another
+    // prompt for an answer the person already gave.
+    let reads = 0
+    __setKeyringModule({
+      Entry: class {
+        getPassword = (): string | null => { reads += 1; return null }
+        setPassword = (): void => { throw new Error('Error: User canceled the operation. (-128)') }
+        deletePassword = (): void => {}
+      },
+    })
+    const dir = mkdtempSync(join(tmpdir(), 'aishell-write-refusal-'))
+    const first = createCredentialsStore({ credentialsDir: dir })
+    expect(keyringRefused()).toBe(false)
+
+    first.set('HW_ACCESS_KEY', 'AK')   // fails over to the file
+    expect(keyringRefused()).toBe(true)
+    // The store now reports the keyring's condition, not the fallback's.
+    expect(keyringRefused()).toBe(true)
+
+    // A second store answers from the latch and never reads the keyring.
+    const afterFirstWrite = reads
+    createCredentialsStore({ credentialsDir: dir })
+    expect(keyringRefused()).toBe(true)
+    expect(reads).toBe(afterFirstWrite)
+  })
+
+  it('routes a SAVE to the file too, once a read has latched the process', () => {
+    // The read that discovers the refusal must also stop the write from trying:
+    // the write would throw, be caught, and fail over anyway, so the attempt
+    // buys nothing but another trip into a keyring that will not answer.
+    let writes = 0
+    __setKeyringModule({
+      Entry: class {
+        getPassword = (): string | null => { throw new Error('denied') }
+        setPassword = (): void => { writes += 1; throw new Error('denied') }
+        deletePassword = (): void => { throw new Error('denied') }
+      },
+    })
+    const dir = mkdtempSync(join(tmpdir(), 'aishell-read-then-save-'))
+    const store = createCredentialsStore({ credentialsDir: dir })
+
+    expect(store.get('HW_ACCESS_KEY')).toBeUndefined()
+    expect(keyringRefused()).toBe(true)
+
+    // Saves through the file without touching the keyring at all.
+    expect(() => { store.set('HW_ACCESS_KEY', 'AK') }).not.toThrow()
+    expect(writes).toBe(0)
+    expect(store.get('HW_ACCESS_KEY')).toBe('AK')
+  })
+
+  it('does not treat an absent entry as a refusal', () => {
+    // `null` means "no such entry", which a poll may ask about freely. Latching
+    // that would silently stop reading a keyring that is working perfectly.
+    let reads = 0
+    __setKeyringModule({
+      Entry: class {
+        getPassword = (): string | null => { reads += 1; return null }
+        setPassword = (): void => {}
+        deletePassword = (): void => {}
+      },
+    })
+    const ks = new KeyringBackend()
+    const afterProbe = reads
+
+    expect(ks.get('HW_ACCESS_KEY')).toBeUndefined()
+    expect(ks.get('HW_ACCESS_KEY')).toBeUndefined()
+    expect(reads).toBe(afterProbe + 2)
+    expect(keyringRefused()).toBe(false)
+  })
+
+  it('forgets the latch only on a fresh process', () => {
+    // Recovery is a restart, and that is what the hook models. Production code
+    // has no other way to clear it, which is the whole point.
+    refusingKeyring()
+    const ks = new KeyringBackend()
+    ks.get('HW_ACCESS_KEY')
+    expect(keyringRefused()).toBe(true)
+
+    __clearKeyringRefusal()
+    expect(keyringRefused()).toBe(false)
+  })
+})
+
+
 describe('KeyringBackend — config', () => {
   beforeEach(() => {
     store.clear()
@@ -384,10 +617,48 @@ describe('KeyringBackend — the Linux store pin', () => {
     ks.has('AK')
     ks.delete('AK')
 
-    expect(seen.length).toBe(5) // probe + set + get + has + delete
+    // One Entry per account, not one per call: the constructor opens the
+    // Secret Service session (~16ms of a ~17ms call), so the backend keeps one
+    // per account and reuses it. The probe is a second account, hence two.
+    //
+    // What the assertion is for is the PIN, and it is asserted on every Entry
+    // that exists rather than on a call count: an entry built without the pin
+    // reopens the silent-fallback path for every operation it serves.
+    expect(seen.length).toBe(2) // probe + AK
     for (const options of seen) {
       expect(options).toEqual({ linux: { store: 'secret-service' } })
     }
+  })
+
+  it('constructs one Entry per account and reuses it', () => {
+    // The cost this avoids: constructing an Entry measured ~16ms while reading
+    // through an existing one measured ~1ms, so per-call construction spends
+    // 96% of a read on a session it already had. A status poll every few
+    // seconds makes that difference visible.
+    let constructed = 0
+    class CountingEntry {
+      constructor(service: string, account: string, options?: unknown) {
+        constructed += 1
+        void service
+        void account
+        void options
+      }
+      getPassword = (): string | null => null
+      setPassword = (): void => {}
+      deletePassword = (): void => {}
+    }
+    __setKeyringModule({ Entry: CountingEntry as never })
+
+    const ks = new KeyringBackend()
+    const afterProbe = constructed
+    ks.get('AK')
+    ks.has('AK')
+    ks.set('AK', 'v')
+    ks.delete('AK')
+    ks.get('AK')
+
+    // Everything after the probe reuses the AK entry.
+    expect(constructed).toBe(afterProbe + 1)
   })
 
   it('falls through to the fingerprint backend when the pinned store is unavailable', () => {
@@ -405,7 +676,12 @@ describe('KeyringBackend — the Linux store pin', () => {
         deletePassword = (): void => {}
       },
     })
-    expect(createCredentialsStore()).toBeInstanceOf(FingerprintBackend)
+    // Same shape as every other path: a FailoverStore, reporting the keyring as
+    // unavailable, serving from the file backend. Returning the bare file
+    // backend here would make `unavailable` lie about a locked keychain.
+    const store = createCredentialsStore()
+    expect(store).toBeInstanceOf(FailoverStore)
+    expect(keyringRefused()).toBe(true)
   })
 })
 
@@ -513,5 +789,109 @@ describe('the memory fallback is shared between callers', () => {
     const b = new MemoryBackend()
     a.set('only-in-a', 'v')
     expect(b.get('only-in-a')).toBeUndefined()
+  })
+})
+
+describe('a locked keyring, a person retyping, and a restart', () => {
+  /**
+   * The whole story one person lives through, asserted end to end because each
+   * step's correctness depends on the previous one and no single unit test sees
+   * the sequence.
+   */
+  let keychain: Map<string, string>
+  let deny: boolean
+
+  beforeEach(() => {
+    __clearKeyringRefusal()
+    keychain = new Map()
+    deny = false
+    __setKeyringModule({
+      Entry: class {
+        constructor(_service: string, account: string) { this.account = account }
+        private readonly account: string
+        getPassword = (): string | null => {
+          if (deny) throw new Error('Error: User canceled the operation. (-128)')
+          return keychain.get(this.account) ?? null
+        }
+        setPassword = (value: string): void => {
+          if (deny) throw new Error('Error: User canceled the operation. (-128)')
+          keychain.set(this.account, value)
+        }
+        deletePassword = (): void => {
+          if (deny) throw new Error('Error: User canceled the operation. (-128)')
+          keychain.delete(this.account)
+        }
+      },
+    })
+  })
+
+  afterEach(() => { __clearKeyringRefusal() })
+
+  it('shows the account name while the keychain is locked, if a file copy exists', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'aishell-story-a-'))
+    // A previous failover left the pair in the file.
+    const seeding = new FingerprintBackend({ credentialsDir: dir })
+    writeHuaweiCloud(seeding, { ak: 'FILE-AK', sk: 'FILE-SK' })
+
+    deny = true
+    const store = createCredentialsStore({ credentialsDir: dir })
+
+    // Reads route to the file, so the pair is available: the chip shows a name.
+    expect(readStoredPair(store)?.ak).toBe('FILE-AK')
+    expect(keyringRefused()).toBe(true)
+  })
+
+  it('shows nothing when neither backend has a pair, and a retype lands in the file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'aishell-story-b-'))
+    deny = true
+    const store = createCredentialsStore({ credentialsDir: dir })
+
+    // Nothing anywhere: the chip says "not configured", which is the truth.
+    expect(readStoredPair(store)).toBeUndefined()
+
+    // The person opens the form and saves. That must work WITHOUT touching the
+    // keychain again — the latch is what keeps the unlock prompt from returning.
+    expect(() => { writeHuaweiCloud(store, { ak: 'TYPED-AK', sk: 'TYPED-SK' }) }).not.toThrow()
+    expect(readStoredPair(store)?.ak).toBe('TYPED-AK')
+    expect(keychain.has('aishell-credential')).toBe(false)
+
+    // And it survives a restart, which is where the fallback matters.
+    __clearKeyringRefusal()
+    deny = false
+    const after = createCredentialsStore({ credentialsDir: dir })
+    expect(readStoredPair(after)?.ak).toBe('TYPED-AK')
+  })
+
+  it('hands authority back to the keyring once it works again', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'aishell-story-c-'))
+    // The keychain holds the credential from before the lock.
+    const direct = new KeyringBackend()
+    writeHuaweiCloud(direct, { ak: 'KEYRING-AK', sk: 'KEYRING-SK' })
+
+    deny = true
+    const locked = createCredentialsStore({ credentialsDir: dir })
+    writeHuaweiCloud(locked, { ak: 'FILE-AK', sk: 'FILE-SK' })
+    expect(readStoredPair(locked)?.ak).toBe('FILE-AK')
+
+    // Restart with the keychain unlocked. The file write was the LATER one, so
+    // it wins — the precedence rule, exercised across a restart boundary.
+    __clearKeyringRefusal()
+    deny = false
+    const store = createCredentialsStore({ credentialsDir: dir })
+    expect(readStoredPair(store)?.ak).toBe('FILE-AK')
+
+    // Saving again through the healthy keychain is what hands authority back:
+    // the shadow is purged by the same call.
+    writeHuaweiCloud(store, { ak: 'NEW-KEYRING-AK', sk: 'NEW-SK' })
+    expect(readStoredPair(store)?.ak).toBe('NEW-KEYRING-AK')
+    // The keyring entry is the encoded bundle, so its CONTENT is asserted by
+    // reading it back through a store bound to that keyring alone.
+    const directAgain = new KeyringBackend()
+    expect(readStoredPair(directAgain)?.ak).toBe('NEW-KEYRING-AK')
+
+    // And a clear removes both, so nothing comes back.
+    clearCredentials(store)
+    expect(readStoredPair(store)).toBeUndefined()
+    expect(keychain.has('aishell-credential')).toBe(false)
   })
 })

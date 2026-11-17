@@ -62,16 +62,24 @@
  * ## Cost on the healthy path
  *
  * The fallback is consulted on every read (once for a value, once for a
- * tombstone). On a machine whose keyring has never failed the fallback has
- * written nothing, so its file does not exist and both lookups are
- * sub-millisecond `existsSync` misses (measured 0.02-0.4 ms). Where a fallback
- * file does exist, each lookup decrypts it — one decrypt per miss, which is what
- * a read-through cache would cost anyway.
+ * tombstone), so one `get` here is up to three store reads. The two costs
+ * differ by two orders of magnitude and which one applies is decided by
+ * whether a failover ever wrote:
+ *
+ *   - **Never failed.** The fallback file does not exist, so both lookups stop
+ *     at `existsSync` — ~1µs each (measured).
+ *   - **Has failed over.** The file exists, so both lookups decrypt it: ~14µs
+ *     each after the key derivation is cached, ~42µs for the whole `get`.
+ *     Decrypting twice is what a read-through cache would avoid, and it is not
+ *     worth one here: the second decrypt is 14µs, and a cache would have to be
+ *     invalidated on every write this store or another process makes.
  *
  * The fallback is built on the first read rather than the first failed write,
- * which a machine with a working keyring pays once per store: ~97 ms, almost
- * all of it the fingerprint backend's scrypt probe (measured). It is lazy and
- * cached, so later reads are unaffected.
+ * so a machine with a working keyring pays its construction once. That cost is
+ * now almost entirely the scrypt key derivation, and the derivation is cached
+ * per PROCESS rather than per backend (`./backends/fingerprint.ts`): a second
+ * store on the same machine finds the key already derived and pays only a file
+ * read. Lazy and cached either way, so later reads are unaffected.
  *
  * @module
  */
@@ -104,6 +112,15 @@ export interface FailoverStoreOptions {
    * throw: the factory's closure ends in MemoryBackend.
    */
   readonly createFallback: () => CredentialsStore
+  /**
+   * Whether the primary has given up for the life of this process.
+   *
+   * The factory is the one place that knows which backend it wrapped and what
+   * that backend's refusal means; asking it here keeps this class free of
+   * per-backend knowledge. Defaults to "no", which is the answer for a primary
+   * that cannot refuse.
+   */
+  readonly primaryGaveUp?: () => boolean
 }
 
 /**
@@ -111,12 +128,18 @@ export interface FailoverStoreOptions {
  * fails a write, then fails over — for the life of this store — to a
  * fallback supplied by {@link FailoverStoreOptions.createFallback}.
  *
- * Stickiness is per instance, not per process: each plugin that consumes
- * credentials builds its own store, so one instance failing over does not stop
- * another from trying the primary. That is intentional — the flag exists to
- * avoid re-hitting a primary already known to be unwritable from *this* store,
- * so a second instance's attempt is one probe rather than a policy decision.
- * Correctness across instances comes from the persisted record, not the flag.
+ * Once a read OR a write finds the primary unusable, this store stops asking it
+ * for good — `failedOver` covers both directions, because a store that cannot
+ * be read cannot be written either, and a poll that keeps asking buys nothing
+ * but another unlock prompt.
+ *
+ * That decision is per instance, which is not enough on its own: each plugin
+ * that consumes credentials builds its own store, so two of them would each
+ * discover the same refusal. What keeps the person from being prompted twice is
+ * the keyring's own latch (`keyringRefused` in `./backends/keyring.ts`), which
+ * is process-wide: the first store to be refused raises it, and every other
+ * store learns it through `primaryGaveUp` instead of asking. Correctness across
+ * processes still comes from the persisted record.
  *
  * Constructed by {@link createCredentialsStore} around a KeyringBackend whose
  * construction probe passed; not meant for direct use by upper layers.
@@ -127,10 +150,21 @@ export class FailoverStore implements CredentialsStore {
   private fallback: CredentialsStore | undefined
   /** Set by the first failed primary write; routes writes thereafter. */
   private failedOver = false
+  /**
+   * Whether the primary has already given up for the life of this process.
+   *
+   * A read that returns nothing cannot be told apart from a read that was
+   * refused, so this is what the caller of the READ tells the store: having
+   * learned the primary is unusable, its writes should not try it either —
+   * they would throw, be caught, and fail over anyway, buying one more trip
+   * into a keyring that will not answer.
+   */
+  private readonly primaryGaveUp: () => boolean
 
   constructor(primary: CredentialsStore, options: FailoverStoreOptions) {
     this.primary = primary
     this.createFallback = options.createFallback
+    this.primaryGaveUp = options.primaryGaveUp ?? (() => false)
   }
 
   /** The lazily built fallback; constructed at most once per store. */
@@ -161,13 +195,24 @@ export class FailoverStore implements CredentialsStore {
     const failedOverValue = this.fallbackStore.get(account)
     if (failedOverValue !== undefined) return failedOverValue
     if (this.fallbackStore.has(tombstoneKey(account))) return undefined
-    return this.primary.get(account)
+    if (this.failedOver) return undefined
+    // A primary the process has already given up on answers nothing without
+    // touching the platform — the latch lives in the backend. Learning that here
+    // is what stops the next SAVE from trying the primary too: it would throw,
+    // be caught, and fail over anyway, so the only thing the extra attempt buys
+    // is one more trip into a keyring this process cannot use.
+    const value = this.primary.get(account)
+    if (value === undefined && this.primaryGaveUp()) this.failedOver = true
+    return value
   }
 
   has(account: string): boolean {
     if (this.fallbackStore.has(account)) return true
     if (this.fallbackStore.has(tombstoneKey(account))) return false
-    return this.primary.has(account)
+    if (this.failedOver) return false
+    const present = this.primary.has(account)
+    if (!present && this.primaryGaveUp()) this.failedOver = true
+    return present
   }
 
   set(account: string, value: string): void {

@@ -23,7 +23,7 @@ import { join } from 'node:path'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 
-const { FingerprintBackend, UnreadableCredentialsFile, CREDENTIALS_FILE_NAME } =
+const { FingerprintBackend, UnreadableCredentialsFile, CREDENTIALS_FILE_NAME, fingerprintDecryptForTest } =
   await import('../src/index.ts')
 const { canonicalQuery, compareCodeUnits } = await import('../src/signer.ts')
 
@@ -170,5 +170,43 @@ describe('signer — canonical query ordering', () => {
     // under a collation the default locale does not necessarily use.
     expect(compareCodeUnits('Zebra', 'apple')).toBeLessThan(0)
     expect('Zebra'.localeCompare('apple')).toBeGreaterThan(0)
+  })
+})
+describe('FingerprintBackend — a write keeps the file it replaced', () => {
+  it('copies the previous file aside before overwriting it', () => {
+    // The credential file is the only copy of a secret. A write that replaces it
+    // with something wrong — an empty map, or a map from a process pointed at
+    // the wrong directory — would otherwise destroy it with no trace: no keyring
+    // holds a second copy, and nothing else on disk does either.
+    const { dir, dispose } = tempDir()
+    try {
+      const backend = new FingerprintBackend({ credentialsDir: dir })
+      backend.set('HW_ACCESS_KEY', 'REAL-AK')
+      backend.set('HW_SECRET_KEY', 'REAL-SK')
+
+      // A second write — whatever it carries — must leave the first recoverable.
+      backend.set('HW_ACCESS_KEY', 'REPLACEMENT')
+
+      const previous = join(dir, `${CREDENTIALS_FILE_NAME}.previous`)
+      expect(existsSync(previous)).toBe(true)
+      // The live file carries the new value.
+      expect(backend.get('HW_ACCESS_KEY')).toBe('REPLACEMENT')
+      // The backup still carries the whole bundle the write replaced, which is
+      // what someone recovering from a bad write would restore.
+      const restored: unknown = JSON.parse(fingerprintDecryptForTest(readFileSync(previous)))
+      expect(restored).toMatchObject({ HW_ACCESS_KEY: 'REAL-AK', HW_SECRET_KEY: 'REAL-SK' })
+    } finally { dispose() }
+  })
+
+  it('does not fail the save when the backup cannot be taken', () => {
+    // Losing the ability to recover the previous file is bad; losing the
+    // ability to save the new one is worse.
+    const { dir, dispose } = tempDir()
+    try {
+      const backend = new FingerprintBackend({ credentialsDir: dir })
+      backend.set('HW_ACCESS_KEY', 'AK')
+      expect(() => { backend.set('HW_ACCESS_KEY', 'AK2') }).not.toThrow()
+      expect(backend.get('HW_ACCESS_KEY')).toBe('AK2')
+    } finally { dispose() }
   })
 })

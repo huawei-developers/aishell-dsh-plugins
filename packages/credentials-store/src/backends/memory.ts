@@ -39,6 +39,7 @@ export class MemoryBackend implements CredentialsStore {
   has(account: string): boolean {
     return this.entries.has(account)
   }
+
 }
 
 /**

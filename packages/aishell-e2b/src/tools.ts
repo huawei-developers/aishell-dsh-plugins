@@ -7,19 +7,32 @@
  * reads the E2B documentation should find nothing surprising here, and the
  * next plugin in this family can keep the same contract.
  *
- * Three conventions are load-bearing and are repeated in the descriptions the
+ * Five conventions are load-bearing and are repeated in the descriptions the
  * model reads:
  *
  *   - **One conversation, one sandbox.** No tool but `aishell__sandbox_create` takes a
  *     `sandboxId`. There is nothing to choose between, so there is no parameter
  *     to get wrong, and no way for a call to land in a different sandbox than
  *     the model meant.
- *   - **`timeoutMs` is milliseconds.** The TypeScript SDK counts milliseconds
- *     where the Python one counts seconds; a model that learned the Python
- *     spelling would ask for a five-second sandbox and get five thousand.
+ *   - **`timeoutMs` is always milliseconds, and means two different spans.**
+ *     Milliseconds everywhere, because the TypeScript SDK counts milliseconds
+ *     where the Python one counts seconds — a model that learned the Python
+ *     spelling would ask for a five-second sandbox and get five thousand. What
+ *     the span measures differs: on `sandbox_create` and `sandbox_set_timeout`
+ *     it is how long the SANDBOX lives, where 0 expires it immediately; on
+ *     `sandbox_commands_run` it is how long the COMMAND may run, where 0 is the
+ *     SDK's "no limit" and the setting a process meant to outlive the call needs.
+ *   - **A command's clock is its own.** `sandbox_commands_run` declares no
+ *     tool-level deadline, so `exec.signal` is never aborted by a budget the
+ *     model did not choose; the command runs until its `timeoutMs` says
+ *     otherwise. `background` makes that safe: it returns a pid immediately
+ *     instead of holding the call open.
  *   - **A non-zero exit is a result, not a failure.** `aishell__sandbox_commands_run`
  *     reports the code and both streams, so a failing command reads as an
  *     outcome to reason about rather than a broken tool.
+ *   - **Cancellation reaches the SDK.** Every call forwards `exec.signal`, so a
+ *     reader who interrupts a turn stops the file transfer or the control-plane
+ *     request in flight rather than letting it finish into nothing.
  *
  * @module @huaweidevtools/aishell-dsh-e2b/tools
  */
@@ -132,6 +145,17 @@ function describeInfo(info: Awaited<ReturnType<Sandbox['getInfo']>>): SandboxDes
  * characters through as 90 KB of text.
  */
 const OUTPUT_LIMIT = 30_000
+
+/**
+ * How many BYTES of a file a base64 result may carry.
+ *
+ * Not {@link OUTPUT_LIMIT}: that one counts code points of text the model reads,
+ * while what leaves here is base64 — 4 characters for every 3 bytes. Measuring
+ * the bytes against the character budget would hand back 40 000 characters for a
+ * 30 000 limit, overrunning the very budget the limit exists to protect. This
+ * value is one third below it so the encoded form lands inside.
+ */
+const BINARY_OUTPUT_LIMIT = 22_500
 
 /**
  * Keep a stream useful without letting one command flood the context.
@@ -288,6 +312,17 @@ function renderSandboxDescription(value: {
   }]
 }
 
+/**
+ * How long a sandbox lives when `aishell__sandbox_create` is not told.
+ *
+ * Sent explicitly rather than omitted. The SDK documents no default for this
+ * option, so what an omitted value means is the service's to decide — a number
+ * this code cannot see, cannot test, and would not notice changing. Passing it
+ * makes the lifetime a property of this tool, and lets the description below
+ * state a figure that is true by construction rather than by reputation.
+ */
+const DEFAULT_SANDBOX_TIMEOUT_MS = 600_000
+
 function createSandboxTool(deps: ToolDeps): ToolDefinition {
   return defineTool({
     name: 'aishell__sandbox_create',
@@ -309,8 +344,9 @@ function createSandboxTool(deps: ToolDeps): ToolDefinition {
         description:
           'Lifetime in MILLISECONDS (the TypeScript SDK counts milliseconds; the Python '
           + 'SDK counts seconds). The sandbox and everything in it are deleted when this '
-          + 'expires. Default 300000 (5 minutes). Choose it from what the work needs: a '
-          + 'page to look at once needs minutes, a working session longer.',
+          + 'expires. Default 600000 (10 minutes). Choose it from what the work needs: a '
+          + 'page to look at once needs minutes, a working session longer, and '
+          + 'aishell__sandbox_set_timeout extends one that is still in use.',
       },
       envs: {
         type: 'object',
@@ -349,7 +385,7 @@ function createSandboxTool(deps: ToolDeps): ToolDefinition {
           input.metadata === undefined ? undefined : stringMap(input.metadata, 'metadata'),
         )
         const sandbox = await deps.client.create(input.template, {
-          ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
+          timeoutMs: input.timeoutMs ?? DEFAULT_SANDBOX_TIMEOUT_MS,
           ...(input.envs === undefined ? {} : { envs: stringMap(input.envs, 'envs') }),
           ...(metadata === undefined ? {} : { metadata }),
           signal: exec.signal,
@@ -551,13 +587,18 @@ function runCommandTool(deps: ToolDeps): ToolDefinition {
       },
       timeoutMs: {
         type: 'number',
-        description: 'How long to let the command run, in MILLISECONDS. Default 60000.',
+        description:
+          'How long the command may run, in MILLISECONDS. Default 60000. Pass 0 for no '
+          + 'limit — that is what a command meant to outlive the call needs, and with '
+          + 'background it is the only way the process survives past the default.',
       },
       background: {
         type: 'boolean',
         description:
-          'Start the command and return its pid without waiting. Use it for a server '
-          + 'that should keep running, and stop it later with aishell__sandbox_commands_kill.',
+          'Start the command and return its pid without waiting. The process keeps '
+          + 'running only as long as timeoutMs allows (60000 by default), so pass 0 or a '
+          + 'long value for a server that should keep running. Stop it later with '
+          + 'aishell__sandbox_commands_kill.',
       },
     },
     output: {
@@ -586,7 +627,13 @@ function runCommandTool(deps: ToolDeps): ToolDefinition {
         return [{ type: 'text', text: parts.join('\n') }]
       },
     },
-    timeoutMs: 300_000,
+    // No tool-level deadline. The command's own `timeoutMs` is the only clock
+    // that should decide this call: it is the one the model reasoned about, it
+    // accepts 0 for "no limit", and it can far exceed any fixed budget. A tool
+    // budget here would abort `exec.signal` first and turn a deliberate
+    // ten-minute build into a "tool call timed out" that the model cannot
+    // explain. `background` returns immediately, so nothing is left unbounded
+    // that the caller did not ask for.
     async execute(args, exec) {
       const input = args as {
         command: string
@@ -730,7 +777,7 @@ function writeFileTool(deps: ToolDeps): ToolDefinition {
       const sandboxId = await requireSandboxId(deps, sessionOf(exec), exec.signal)
       try {
         const handle = await deps.client.handle(sandboxId)
-        await handle.files.write(input.path, input.content)
+        await handle.files.write(input.path, input.content, { signal: exec.signal })
         return { path: input.path, bytes: Buffer.byteLength(input.content, 'utf8') }
       } catch (error) {
         throw new SandboxToolError(describeBoundError(error, 'aishell__sandbox_files_write'))
@@ -779,8 +826,8 @@ function readFileTool(deps: ToolDeps): ToolDefinition {
       try {
         const handle = await deps.client.handle(sandboxId)
         if (input.format === 'base64') {
-          const bytes = await handle.files.read(input.path, { format: 'bytes' })
-          const clipped = bytes.byteLength > OUTPUT_LIMIT ? bytes.subarray(0, OUTPUT_LIMIT) : bytes
+          const bytes = await handle.files.read(input.path, { format: 'bytes', signal: exec.signal })
+          const clipped = bytes.byteLength > BINARY_OUTPUT_LIMIT ? bytes.subarray(0, BINARY_OUTPUT_LIMIT) : bytes
           return {
             path: input.path,
             format: 'base64',
@@ -789,7 +836,7 @@ function readFileTool(deps: ToolDeps): ToolDefinition {
             truncated: clipped.byteLength !== bytes.byteLength,
           }
         }
-        const text = await handle.files.read(input.path, { format: 'text' })
+        const text = await handle.files.read(input.path, { format: 'text', signal: exec.signal })
         const clipped = clip(text)
         return {
           path: input.path,
@@ -854,9 +901,9 @@ function downloadFileTool(deps: ToolDeps, ctx: Context): ToolDefinition {
 
         // Read as bytes, then decide. Reading as text first would throw on a
         // binary file rather than letting the tool report what it found.
-        const bytes = await handle.files.read(input.path, { format: 'bytes' })
+        const bytes = await handle.files.read(input.path, { format: 'bytes', signal: exec.signal })
         if (isProbablyBinary(bytes)) {
-          const clipped = bytes.byteLength > OUTPUT_LIMIT ? bytes.subarray(0, OUTPUT_LIMIT) : bytes
+          const clipped = bytes.byteLength > BINARY_OUTPUT_LIMIT ? bytes.subarray(0, BINARY_OUTPUT_LIMIT) : bytes
           return {
             path: input.path,
             bytes: bytes.byteLength,
@@ -975,7 +1022,10 @@ function listFilesTool(deps: ToolDeps): ToolDefinition {
         const handle = await deps.client.handle(sandboxId)
         // Built conditionally rather than spread: `exactOptionalPropertyTypes`
         // makes `{ depth: undefined }` a different type from `{}`.
-        const options = input.depth === undefined ? undefined : { depth: input.depth }
+        const options = {
+          ...input.depth === undefined ? {} : { depth: input.depth },
+          signal: exec.signal,
+        }
         const entries = await handle.files.list(input.path, options)
         return {
           path: input.path,

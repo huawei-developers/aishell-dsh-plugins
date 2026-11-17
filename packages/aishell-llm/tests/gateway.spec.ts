@@ -24,7 +24,7 @@ class MockEntry {
 const fetchMock = vi.fn()
 vi.stubGlobal('fetch', fetchMock)
 
-const { createCredentialsStore, __setKeyringModule } = await import('@huaweidevtools/aishell-dsh-credentials-store')
+const { createCredentialsStore, __setKeyringModule, __clearKeyringRefusal } = await import('@huaweidevtools/aishell-dsh-credentials-store')
 const { GatewayAdapter } = await import('../src/adapter.ts')
 
 /** The adapter's instance type; the destructured class is a value, not a type. */
@@ -32,6 +32,12 @@ type GatewayAdapter = InstanceType<typeof GatewayAdapter>
 
 // Inject before any KeyringBackend is constructed.
 __setKeyringModule({ Entry: MockEntry })
+
+// `vitest.setup.ts` runs first and seals the real keyring with an `Entry` that
+// throws, which latches the process-wide refusal before this file's mock is
+// installed. Clearing it here is what makes this spec's own in-memory keyring
+// reachable — the same reset every spec that installs its own backend needs.
+__clearKeyringRefusal()
 
 const BASE_URL = 'https://test.example.com/v2'
 

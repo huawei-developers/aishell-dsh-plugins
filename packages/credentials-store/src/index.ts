@@ -16,7 +16,7 @@
  * @module @huaweidevtools/aishell-dsh-credentials-store
  */
 
-import { KeyringBackend } from './backends/keyring.ts'
+import { KeyringBackend, keyringRefused } from './backends/keyring.ts'
 import { FingerprintBackend } from './backends/fingerprint.ts'
 import { sharedMemoryBackend } from './backends/memory.ts'
 import { FailoverStore } from './failover.ts'
@@ -67,23 +67,68 @@ export interface CredentialsStore {
  * collection was locked is not shadowed by the keyring's stale copy once it
  * unlocks.
  *
- * @returns the highest-priority backend that could initialize.
+ * ## A refused probe still yields a FailoverStore
+ *
+ * The keyring's constructor probe is a real read, so it is the first casualty of
+ * a locked keychain at launch. Returning the bare file backend there would give
+ * callers two different store shapes for the same question, and would leave the
+ * process unaware that a keyring exists at all.
+ *
+ * So a refused probe installs an {@link UnavailableStore} as the primary instead,
+ * and the factory always returns a {@link FailoverStore}. Reads route to the
+ * file backend, the refusal is latched process-wide by the keyring module, and a
+ * later store on the same process does not pay for another probe.
+ *
+ * @returns a {@link FailoverStore}, whatever the keyring's condition.
  */
 export function createCredentialsStore(config: CredentialsStoreConfig = {}): CredentialsStore {
   const keyring: CredentialsStore | undefined = (() => {
+    // A latched refusal is answered from the latch: the probe would only raise
+    // another prompt to learn what this process already knows.
+    if (keyringRefused()) return undefined
     try {
       return new KeyringBackend(config)
     } catch {
-      // OS keyring unavailable — try the fingerprint file backend.
+      // OS keyring unavailable (or refused at the probe) — the file backend
+      // takes over, and this process will not ask the keyring again.
       return undefined
     }
   })()
-  if (keyring !== undefined) {
-    // FingerprintBackend construction probes machine-id (deriveKey); if that
-    // fails, MemoryBackend closes the chain — createFallback never throws.
-    return new FailoverStore(keyring, { createFallback: () => createFallbackStore(config) })
+  // One shape whether or not the keyring answered. Construction of the fallback
+  // stays lazy: a healthy keyring never pays for it.
+  return new FailoverStore(
+    keyring ?? new UnavailableStore(),
+    {
+      createFallback: () => createFallbackStore(config),
+      // A refused keyring, or the stand-in for one, must not be tried by the
+      // write path either — the reads said so already.
+      primaryGaveUp: () => keyring === undefined || keyringRefused(),
+    },
+  )
+}
+
+/**
+ * A primary that never answers.
+ *
+ * Stands in for a keyring whose probe was refused, so {@link FailoverStore} has
+ * something to hold: reads answer nothing and writes throw, which routes every
+ * path through it to the file backend. It exists so a refused probe yields the
+ * same store shape as a working one — what a caller acts on is the credential,
+ * which the fallback supplies either way.
+ */
+class UnavailableStore implements CredentialsStore {
+  get(_account: string): string | undefined {
+    return undefined
   }
-  return createFallbackStore(config)
+  has(_account: string): boolean {
+    return false
+  }
+  set(_account: string, _value: string): void {
+    throw new Error('the OS keyring refused this process; it is not being asked again')
+  }
+  delete(_account: string): void {
+    throw new Error('the OS keyring refused this process; it is not being asked again')
+  }
 }
 
 /** Probe the durable-file and memory backends behind the keyring. */
@@ -102,7 +147,7 @@ function createFallbackStore(config: CredentialsStoreConfig): CredentialsStore {
 }
 
 export { CREDENTIAL_SCOPE, CREDENTIALS_FILE_NAME, DEFAULT_SCOPE, KEYRING_SERVICE } from './scope.ts'
-export { KeyringBackend, __setKeyringModule } from './backends/keyring.ts'
-export { FingerprintBackend, UnreadableCredentialsFile } from './backends/fingerprint.ts'
+export { KeyringBackend, __setKeyringModule, keyringRefused, __clearKeyringRefusal } from './backends/keyring.ts'
+export { FingerprintBackend, UnreadableCredentialsFile, fingerprintDecryptForTest } from './backends/fingerprint.ts'
 export { MemoryBackend, __resetSharedMemoryBackend, sharedMemoryBackend } from './backends/memory.ts'
 export { FailoverStore } from './failover.ts'

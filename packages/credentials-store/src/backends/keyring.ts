@@ -60,6 +60,51 @@ function loadKeyring(): KeyringModule {
 }
 
 /**
+ * Whether this process has been refused by the platform.
+ *
+ * ## The unit is the process
+ *
+ * Every plugin that consumes credentials builds its own store, and the platform
+ * answers all of them the same way. A latch per store would let each one
+ * discover the same refusal, so a person who denied one unlock prompt would be
+ * asked again by the next consumer. The refusal is a fact about this process's
+ * relationship to the platform, so it is recorded once, here.
+ *
+ * ## The lifetime is the process
+ *
+ * A refusal closes both directions. The store that will not be read will not be
+ * written either, so no other process can put a credential into it and a poll
+ * can learn nothing it did not already know: every further attempt costs one
+ * unlock prompt and returns nothing. Asking once and remembering the answer is
+ * the only behaviour whose cost is not pure loss.
+ *
+ * The latch therefore lasts exactly as long as the process does. A person who
+ * unlocks the keychain afterwards is served from the next launch, and until
+ * then by the failover file — which is where a credential saved while the
+ * keyring was unavailable lives (`../failover.ts`). Neither the credential nor
+ * the ability to save one is lost in the meantime; what is deferred is the
+ * keyring's own copy.
+ *
+ * Set by {@link KeyringBackend}, read by {@link keyringRefused}.
+ */
+let refused = false
+
+/** Whether this process's OS keyring has been refused. */
+export function keyringRefused(): boolean {
+  return refused
+}
+
+/**
+ * @internal Test hook: forget a recorded refusal, as a fresh process would.
+ *
+ * Production code never calls this — the whole point is that the latch outlives
+ * any one store.
+ */
+export function __clearKeyringRefusal(): void {
+  refused = false
+}
+
+/**
  * OS-keyring {@link CredentialsStore}. Constructed with a shared service name;
  * every entry is stored under `new Entry(service, account, { linux: { store:
  * 'secret-service' } })`.
@@ -74,6 +119,19 @@ export class KeyringBackend implements CredentialsStore {
   private readonly serviceName: string
   private readonly options: KeyringEntryOptions
   private readonly Entry: KeyringModule['Entry']
+  /**
+   * One `Entry` per account, kept for the process's life.
+   *
+   * Constructing an `Entry` costs ~16ms while the read on an existing one costs
+   * ~1ms — the constructor opens the Secret Service session, and doing that per
+   * call spends 96% of a read on setup it already had a moment earlier. Entries
+   * are keyed by account because the constructor binds the account name.
+   *
+   * Reuse is safe for correctness: the native object resolves the entry on each
+   * `getPassword`, so a value another process wrote is still seen. Only the
+   * session handle is reused.
+   */
+  private readonly entries = new Map<string, KeyringEntry>()
 
   constructor(_config: CredentialsStoreConfig = {}) {
     this.serviceName = KEYRING_SERVICE
@@ -83,26 +141,84 @@ export class KeyringBackend implements CredentialsStore {
     this.options = { linux: { store: 'secret-service' } }
     this.Entry = loadKeyring().Entry
     // Probe: a getPassword on a throwaway account exercises the native path.
-    new this.Entry(this.serviceName, '__probe__', this.options).getPassword()
+    // A throw here means the platform would not answer — which IS a refusal, and
+    // is latched so no later store in this process probes it again. That is what
+    // keeps a refused launch to one prompt instead of one per consumer.
+    try {
+      this.entryFor('__probe__').getPassword()
+    } catch (error: unknown) {
+      refused = true
+      throw error
+    }
+  }
+
+  /**
+   * The `Entry` for one account, constructed on first use.
+   *
+   * @param account - the credential account name.
+   * @returns the cached entry.
+   */
+  private entryFor(account: string): KeyringEntry {
+    let entry = this.entries.get(account)
+    if (entry === undefined) {
+      entry = new this.Entry(this.serviceName, account, this.options)
+      this.entries.set(account, entry)
+    }
+    return entry
   }
 
   get(account: string): string | undefined {
+    // A refused platform is not asked again. On macOS every read of a denied
+    // entry re-raises the unlock prompt, and a refusal means nothing was written
+    // since either, so the answer cannot have changed. See `refused`.
+    if (refused) return undefined
     try {
-      const value = new this.Entry(this.serviceName, account, this.options).getPassword()
+      const value = this.entryFor(account).getPassword()
       return value ?? undefined
     } catch {
+      // A throw is "the store could not be read", never "no such entry" — the
+      // binding reports absence as `null`. Latching it is what stops the next
+      // poll from prompting again.
+      refused = true
       return undefined
     }
   }
 
   set(account: string, value: string): void {
     if (value.length === 0) throw new Error('credential value must be non-empty')
-    new this.Entry(this.serviceName, account, this.options).setPassword(value)
+    // Throws rather than silently accepting: `FailoverStore` learns the primary
+    // is unusable from the throw, and a quiet success here would leave it
+    // believing the value landed while the person's save was lost. The message
+    // names the condition, not a remedy — the failover layer turns this into a
+    // successful save somewhere else, so it is a classification signal rather
+    // than anything a person reads.
+    if (refused) {
+      throw new Error('the OS keyring refused this process; it is not being asked again')
+    }
+    try {
+      this.entryFor(account).setPassword(value)
+    } catch (error: unknown) {
+      // A refused WRITE is a refusal like any other: the same platform answer
+      // that stops reads stops writes, and a read after it would raise the same
+      // prompt for nothing. Latching here matters for a machine that launches
+      // with the keychain unlockable enough to READ but not to WRITE — without
+      // it, every later store in this process probes again and prompts again.
+      // The caller still gets the throw, so `FailoverStore` fails over exactly
+      // as before.
+      refused = true
+      throw error
+    }
   }
 
   delete(account: string): void {
+    // Like `set`, and for the same reason: a latched keyring must report that it
+    // could not delete, or `FailoverStore` would believe the copy is gone and
+    // stop masking it.
+    if (refused) {
+      throw new Error('the OS keyring refused this process; it is not being asked again')
+    }
     try {
-      new this.Entry(this.serviceName, account, this.options).deletePassword()
+      this.entryFor(account).deletePassword()
     } catch (error: unknown) {
       // Deleting an absent entry is not an error, but the native binding has no
       // stable code for it — only wording. This filter is deliberately narrow:
@@ -113,16 +229,17 @@ export class KeyringBackend implements CredentialsStore {
       // person asked for it to be gone. `FailoverStore.delete` is what handles
       // the locked case — it needs this error to escape from here to see it.
       if (!String(error).includes('not found') && !String(error).includes('no entry')) {
+        // Same reasoning as the write path: a refusal is a refusal in every
+        // direction, so it is latched before the error escapes to failover.
+        refused = true
         throw error
       }
     }
   }
 
   has(account: string): boolean {
-    try {
-      return new this.Entry(this.serviceName, account, this.options).getPassword() !== null
-    } catch {
-      return false
-    }
+    // Shares `get`'s answer, so `has` cannot prompt where `get` would not, and
+    // the two never disagree about the same account.
+    return this.get(account) !== undefined
   }
 }

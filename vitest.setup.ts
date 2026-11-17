@@ -55,8 +55,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   KeyringBackend,
+  __clearKeyringRefusal,
   __setKeyringModule,
   createCredentialsStore,
+  keyringRefused,
 } from '@huaweidevtools/aishell-dsh-credentials-store'
 
 /** Set this to let a run touch the real machine. Anything else keeps the seal. */
@@ -108,7 +110,15 @@ if (realStateAllowed()) {
   // 3. Verify the seal functionally. With the keyring sealed, the factory
   //    cannot produce a KeyringBackend — its construction probe throws. If one
   //    comes back, the seal is not in force and tests could reach real storage.
+  //
+  //    The probe is a refused read, and a refused read latches the keyring
+  //    backend's process-wide refusal (`keyringRefused`). Verification is the
+  //    only caller that wants that latch: a spec installing its own keyring mock
+  //    would otherwise find every read answered from the latch rather than from
+  //    the mock. So the latch is cleared as the last step of the seal — the
+  //    process a spec inherits is one that has never been refused.
   const probe = createCredentialsStore()
+  __clearKeyringRefusal()
   if (probe instanceof KeyringBackend) {
     throw new Error(
       '[vitest.setup] keyring seal is NOT in force: createCredentialsStore() returned a live '

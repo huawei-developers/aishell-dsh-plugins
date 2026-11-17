@@ -113,8 +113,8 @@ function makeSandbox(id: string): StubSandbox {
       },
     },
     files: {
-      write: async (path: string, data: unknown) => {
-        calls.push({ method: 'files.write', args: [path, data] })
+      write: async (path: string, data: unknown, opts?: unknown) => {
+        calls.push({ method: 'files.write', args: [path, data, opts] })
         if (handleIsGone) throw sandboxGone()
         return { path }
       },
@@ -181,7 +181,17 @@ const { registerSandboxTools } = await import('../src/tools.ts')
 const { SandboxToolError } = await import('../src/errors.ts')
 
 /** The tool definitions the plugin registered, by name. */
-let tools: Map<string, { execute: (args: unknown, exec: unknown) => Promise<unknown> }> = new Map()
+/**
+ * The registered definitions, keyed by tool name.
+ *
+ * `timeoutMs` is part of the declaration a tool publishes to the timeout
+ * policy, so the map keeps it: a spec asserts the absence of a budget as well
+ * as the presence of the callable.
+ */
+let tools: Map<string, {
+  execute: (args: unknown, exec: unknown) => Promise<unknown>
+  timeoutMs?: number
+}> = new Map()
 /** Files written through the stub filesystem. */
 let fsWrites: Array<{ path: string, text: string }> = []
 /** Every `fs.resolve` call, so a spec can see the cwd a tool anchored at. */
@@ -325,6 +335,23 @@ describe('aishell__sandbox_create', () => {
       envs: { A: '1' },
       metadata: { client: 'test', 'aishell-session': 's1' },
     })
+  })
+
+  it('sends the default lifetime when none is given', async () => {
+    // The SDK documents no default for this option, so omitting it would hand
+    // the decision to the service — a number this code could not see, test, or
+    // notice changing. Sending it makes the lifetime this tool's own.
+    await tools.get('aishell__sandbox_create')!.execute({ template: 'node' }, exec())
+
+    const [, opts] = argsOf('create')
+    expect((opts as { timeoutMs?: number }).timeoutMs).toBe(600_000)
+  })
+
+  it('sends the lifetime the caller asked for', async () => {
+    await tools.get('aishell__sandbox_create')!.execute({ timeoutMs: 60_000 }, exec())
+
+    const [, opts] = argsOf('create')
+    expect((opts as { timeoutMs?: number }).timeoutMs).toBe(60_000)
   })
 
   it('binds the sandbox to the conversation', async () => {
@@ -494,6 +521,24 @@ describe('aishell__sandbox_commands_run', () => {
     expect((argsOf('commands.run')[1] as { background?: boolean }).background).toBe(true)
   })
 
+  it('forwards timeoutMs 0 rather than dropping it as "no value"', async () => {
+    // 0 is the SDK's "no time limit", the only setting a command meant to
+    // outlive the call can use. A forwarded-through-Undefined check that reads
+    // 0 as absent would silently restore the 60s default and kill the process.
+    await withSandbox()
+    await tools.get('aishell__sandbox_commands_run')!.execute({ command: 'sleep', timeoutMs: 0 }, exec())
+
+    expect(argsOf('commands.run')[1]).toMatchObject({ timeoutMs: 0 })
+  })
+
+  it('declares no tool-level deadline of its own', () => {
+    // The command's timeoutMs is the only clock this call should have: it is
+    // the one the model reasoned about, and it accepts 0 for "no limit". A
+    // declared budget here would abort exec.signal before the command's own
+    // deadline and report a timeout the model never asked for.
+    expect(tools.get('aishell__sandbox_commands_run')!.timeoutMs).toBeUndefined()
+  })
+
   it('forwards cwd, envs, and a timeout when given', async () => {
     await withSandbox()
     await tools.get('aishell__sandbox_commands_run')!.execute({
@@ -538,6 +583,23 @@ describe('aishell__sandbox_commands_kill', () => {
 })
 
 describe('the filesystem tools', () => {
+  it('forwards the cancellation signal on every filesystem call', async () => {
+    // A large read or a slow upload has to be abortable: without the signal the
+    // SDK call runs to completion after the reader has already given up, and
+    // nothing on screen can stop it.
+    const cancelled = exec('s1') as { signal: AbortSignal }
+    await withSandbox()
+    await tools.get('aishell__sandbox_files_write')!.execute({ path: '/w/a.txt', content: 'x' }, cancelled)
+    await tools.get('aishell__sandbox_files_read')!.execute({ path: '/w/a.txt' }, cancelled)
+    await tools.get('aishell__sandbox_files_list')!.execute({ path: '/w' }, cancelled)
+
+    const forwarded = calls
+      .filter(entry => entry.method.startsWith('files.'))
+      .map(entry => (entry.args[entry.args.length - 1] as { signal?: AbortSignal } | undefined)?.signal)
+    expect(forwarded).toHaveLength(3)
+    for (const signal of forwarded) expect(signal).toBe(cancelled.signal)
+  })
+
   it('writes text to the path it was given', async () => {
     await withSandbox()
     const result = await tools.get('aishell__sandbox_files_write')!.execute(
@@ -546,7 +608,7 @@ describe('the filesystem tools', () => {
     )
 
     expect(result).toEqual({ path: '/w/index.html', bytes: 11 })
-    expect(argsOf('files.write')).toEqual(['/w/index.html', '<h1>hi</h1>'])
+    expect(argsOf('files.write').slice(0, 2)).toEqual(['/w/index.html', '<h1>hi</h1>'])
   })
 
   it('reads text by default and bytes when base64 is asked for', async () => {
@@ -559,6 +621,22 @@ describe('the filesystem tools', () => {
       exec(),
     )
     expect(bytes).toMatchObject({ format: 'base64', content: 'aGk=', bytes: 2 })
+  })
+
+  it('keeps a base64 result inside the context budget', async () => {
+    // base64 turns 3 bytes into 4 characters, so a byte cap equal to the
+    // character budget would return a third more text than the budget allows.
+    await withSandbox()
+    bytesBody = new Uint8Array(60_000)
+    const result = await tools.get('aishell__sandbox_files_read')!.execute(
+      { path: '/w/big.bin', format: 'base64' },
+      exec(),
+    ) as { content: string, bytes: number, truncated: boolean }
+
+    expect(result.truncated).toBe(true)
+    // The whole point: the ENCODED length is what reaches the model.
+    expect(result.content.length).toBeLessThanOrEqual(30_000)
+    expect(result.bytes).toBeLessThan(60_000)
   })
 
   it('lists entries with their type, and a size only where one exists', async () => {

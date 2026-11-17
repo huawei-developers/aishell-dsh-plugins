@@ -12,7 +12,7 @@
  */
 
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto'
-import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs'
+import { copyFileSync, existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
 import machineIdModule from 'node-machine-id'
 import { CREDENTIALS_FILE_NAME } from '../scope.ts'
@@ -61,9 +61,54 @@ function deriveKey(): Buffer {
   return scryptSync(machineId, SALT, KEY_LEN, SCRYPT_PARAMS)
 }
 
+/**
+ * @internal Test hook: decrypt one file's bytes with the same key the backend
+ * uses, so a spec can assert on what a file actually holds — including the
+ * backup, which the backend itself never reads.
+ *
+ * @param data - the file's bytes.
+ * @returns the plaintext.
+ */
+export function fingerprintDecryptForTest(data: Buffer): string {
+  return fingerprintDecrypt(data)
+}
+
+/**
+ * The derived key, once it has been computed in this process.
+ *
+ * ## Why this is cached and the decrypted map is not
+ *
+ * `deriveKey` costs ~61ms — 4000× a GCM decrypt (14.9µs), because scrypt is
+ * deliberately expensive: that expense IS the defence against an offline
+ * attacker guessing the machine id. But the expense buys nothing per call: the
+ * key is a function of the machine id and this process's device, both of which
+ * are fixed for the process's lifetime. Re-deriving it on every read spends the
+ * defence over and over to reach the same 32 bytes.
+ *
+ * The DECRYPTED MAP stays uncached, which is the part that matters for
+ * correctness: a credential written by another process is still visible on the
+ * next `get`, because every call re-reads the file and re-decrypts it. Caching
+ * the key changes only how fast the same plaintext is reached.
+ */
+let cachedKey: Buffer | undefined
+
+/**
+ * The process's derived key, computed once.
+ *
+ * Held in a module variable rather than on the instance because two backends
+ * (a store and a test's) derive the same bytes for the same machine, and the
+ * derivation is the only expensive part.
+ *
+ * @returns the derived key.
+ */
+function processKey(): Buffer {
+  cachedKey ??= deriveKey()
+  return cachedKey
+}
+
 /** Encrypt plaintext → [nonce][tag][ciphertext] as a Buffer. */
 function fingerprintEncrypt(plaintext: string): Buffer {
-  const key = deriveKey()
+  const key = processKey()
   const nonce = randomBytes(NONCE_LEN)
   const cipher = createCipheriv('aes-256-gcm', key, nonce)
   const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()])
@@ -76,7 +121,7 @@ function fingerprintDecrypt(data: Buffer): string {
   if (data.length < NONCE_LEN + TAG_LEN) {
     throw new Error('credentials file corrupted (too short)')
   }
-  const key = deriveKey()
+  const key = processKey()
   const nonce = data.subarray(0, NONCE_LEN)
   const tag = data.subarray(NONCE_LEN, NONCE_LEN + TAG_LEN)
   const ciphertext = data.subarray(NONCE_LEN + TAG_LEN)
@@ -139,16 +184,21 @@ export class FingerprintBackend implements CredentialsStore {
   constructor(config: CredentialsStoreConfig = {}) {
     this.fileDir = resolveCredentialsDir(config)
     this.filePath = join(this.fileDir, CREDENTIALS_FILE_NAME)
-    // Probe: deriveKey exercises node-machine-id. If it throws, the factory
-    // falls back to MemoryBackend.
-    deriveKey()
+    // Probe: processKey exercises node-machine-id, and warms the key cache so
+    // the first real read does not pay the derivation. If it throws, the
+    // factory falls back to MemoryBackend.
+    processKey()
   }
 
   /**
-   * Load + decrypt the file into a fresh map. Not cached — credentials are
-   * read, used, and dropped so plaintext does not linger in memory between
-   * operations. The file I/O + scrypt decrypt per call is acceptable: this is
-   * not a hot path (once per chat request, not per token).
+   * Load + decrypt the file into a fresh map.
+   *
+   * The MAP is not cached — credentials are read, used, and dropped so
+   * plaintext does not linger in memory between operations, and so a write from
+   * another process is visible on the next call. What is cached is the derived
+   * key ({@link processKey}), which costs ~61ms to compute and is a constant for
+   * the process's life; caching it is what makes a frequent status poll cheap.
+   * Re-reading and re-decrypting stays at ~15µs.
    *
    * @throws {@link UnreadableCredentialsFile} when the file exists but cannot be
    *   decrypted or parsed. Callers decide what that means; see the note on
@@ -235,9 +285,40 @@ export class FingerprintBackend implements CredentialsStore {
   private persist(entries: Map<string, string>): void {
     const plaintext = JSON.stringify(Object.fromEntries(entries))
     mkdirSync(this.fileDir, { recursive: true, mode: 0o700 })
+    // Keep the previous file before overwriting it. This file is the only copy
+    // of a credential: a write that replaces it with something wrong — an empty
+    // map from a call that read nothing, a map from a process pointed at the
+    // wrong directory — destroys the secret with no trace, and neither the
+    // keyring nor any backup holds a second copy.
+    //
+    // `copyFileSync` rather than a rename: a rename would leave the live path
+    // momentarily absent, and the read path treats absence as "nothing stored".
+    // The backup is a superset of that window rather than an exchange of it.
+    this.keepPrevious()
     // Write owner-only (0600); on platforms that ignore the mode (Windows)
     // the file is still encrypted, and ACLs inherit from the profile dir.
     writeFileSync(this.filePath, fingerprintEncrypt(plaintext), { mode: 0o600 })
+  }
+
+  /**
+   * Copy the current file aside before a write replaces it.
+   *
+   * One generation, not a chain: what this defends against is a bad write, and
+   * the copy that matters is the one immediately before it. A growing history
+   * of encrypted credential files in a user's profile is a bigger problem than
+   * the one it solves.
+   *
+   * Best-effort. A backup that cannot be taken must not fail the save — losing
+   * the ability to write the credential would be worse than losing the ability
+   * to recover the previous one.
+   */
+  private keepPrevious(): void {
+    if (!existsSync(this.filePath)) return
+    try {
+      copyFileSync(this.filePath, `${this.filePath}.previous`)
+    } catch {
+      // Read-only directory, disk full, permission oddity: the save proceeds.
+    }
   }
 
   /**

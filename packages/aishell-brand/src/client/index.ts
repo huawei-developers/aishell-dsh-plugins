@@ -29,6 +29,7 @@ import { installFaviconShadow } from './favicon-shadow.ts'
 import { installRunningMarkShadow } from './running-mark-shadow.ts'
 import { installRunningTextShadow } from './running-text-shadow.ts'
 import { installHomeWhaleShadow } from './home-whale-shadow.ts'
+import { installReplyDisclaimer } from './reply-disclaimer.ts'
 
 /** Required services: the UI slot registry and the locale registry. */
 export const inject = ['slots', 'locale']
@@ -79,6 +80,24 @@ export function apply(ctx: ClientContext): void {
     ctx.effect(() => installHeroPatchCss(document), 'aishell-brand: hero patch css')
     ctx.effect(() => installHeroHoverBridge(document), 'aishell-brand: hero hover bridge')
     ctx.effect(() => installPoweredBy(document), 'aishell-brand: powered-by label')
+    // The standing notice that trails a running or answered reply. It cannot be a
+    // slot entry: Chat publishes its per-Turn footer slot only after the Turn
+    // ends, and the notice has to be there while the answer is still being
+    // written. Both anchors it uses — the running status and the Turn footer —
+    // are shadowed instead.
+    //
+    // The text is a RESOLVER, re-read on every sweep, and the locale change
+    // subscription re-sweeps: `bind` reads the active locale at call time, so
+    // together they carry a language switch to the Turns already on screen
+    // rather than only to the next one.
+    ctx.effect(
+      () => installReplyDisclaimer(
+        document,
+        () => ctx.locale.bind(NS)('reply.disclaimer'),
+        ctx.locale,
+      ),
+      'aishell-brand: reply disclaimer',
+    )
     // Window title: the product name in document.title is rewritten at
     // every write.
     ctx.effect(() => installTitleShadow(document), 'aishell-brand: window title shadow')

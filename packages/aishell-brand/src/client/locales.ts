@@ -87,6 +87,11 @@ export const zh = {
   'suggestion.security.gloss': '检查云资源是否存在安全问题',
   'suggestion.security.prompt':
     '请检查我的华为云资源是否存在安全问题，重点看安全组规则、端口暴露、存储权限和密钥管理，指出高危项并给出修复建议。',
+
+  // The standing notice that trails a running or answered Turn. It is a
+  // statement about the answer, not a warning about the product, so it reads
+  // the same whether or not anything went wrong.
+  'reply.disclaimer': '内容由 AI 生成，仅供参考',
 } as const
 
 /** English dictionary. Complete against {@link zh}; also the terminal fallback. */
@@ -144,6 +149,14 @@ export const en = {
     'Check my Huawei Cloud resources for security problems, looking in particular at '
     + 'security group rules, exposed ports, storage permissions and key management. '
     + 'Point out anything high-risk and suggest how to fix it.',
+
+  // The standing notice that trails a running or answered Turn — see the zh
+  // entry. Two sentences: the first states provenance, the second is an
+  // instruction, and only a full stop gives that instruction the weight it
+  // needs. "Before relying on it" names the risk the reader actually faces —
+  // acting on the answer — where "for accuracy" would only restate what
+  // `verify` already implies.
+  'reply.disclaimer': 'AI-generated content. Verify before relying on it.',
 } as const
 
 /** Every key, derived from the zh dictionary (the source of truth). */

@@ -75,6 +75,10 @@ declare class ElementStub {
   get rel(): string
   appendChild<T extends Node>(child: T): T
   insertBefore<T extends Node>(child: T, before: Node | null): T
+  /** The next sibling node, as the DOM's `nextSibling`. */
+  readonly nextSibling: Node | null
+  /** The next sibling element, as the DOM's `nextElementSibling`. */
+  readonly nextElementSibling: ElementStub | null
   remove(): void
   classIncludes(fragment: string): boolean
   /** Inline style; only `cssText` is read or written by the modules here. */
@@ -82,6 +86,8 @@ declare class ElementStub {
   get textContent(): string
   set textContent(value: string)
   closest(selector: string): ElementStub | null
+  /** Whether this element itself answers `selector`, as the DOM's `matches`. */
+  matches(selector: string): boolean
   querySelectorAll(selector: string): ElementStub[]
   querySelector(selector: string): ElementStub | null
   addEventListener(type: string, handler: () => void): void
@@ -173,7 +179,11 @@ const ElementClass = class {
   }
 
   insertBefore<T extends Node>(child: T, before: Node | null): T {
-    const index = before === null ? -1 : this.childNodes.indexOf(before)
+    // `before === null` means append, and the DOM still resolves it — the stub
+    // keeps that too, because a module inserting a sibling passes `nextSibling`
+    // straight through and that is null for a last child.
+    if (before === null) return this.appendChild(child)
+    const index = this.childNodes.indexOf(before)
     if (index === -1) return this.appendChild(child)
     this.childNodes.splice(index, 0, child)
     if (child instanceof ElementClass || child instanceof TextClass) {
@@ -184,6 +194,28 @@ const ElementClass = class {
 
   get children(): ElementStub[] {
     return this.childNodes.filter(node => node instanceof ElementClass) as unknown as ElementStub[]
+  }
+
+  /** The node after this one in its parent, as the DOM's `nextSibling`. */
+  get nextSibling(): Node | null {
+    const parent = this.parentElement
+    if (parent === null) return null
+    const siblings = (parent as unknown as { childNodes: Node[] }).childNodes
+    return siblings[siblings.indexOf(this as unknown as Node) + 1] ?? null
+  }
+
+  /**
+   * The element after this one, as the DOM's `nextElementSibling`.
+   *
+   * A module that inserts a sibling resolves its target through this, so a stub
+   * without it cannot run one at all — and returning `undefined` rather than
+   * `null` would make `=== null` checks silently wrong.
+   */
+  get nextElementSibling(): ElementStub | null {
+    const parent = this.parentElement
+    if (parent === null) return null
+    const siblings = (parent as unknown as { children: ElementStub[] }).children
+    return siblings[siblings.indexOf(this as unknown as ElementStub) + 1] ?? null
   }
 
   getAttribute(name: string): string | null { return this.attributes.get(name) ?? null }
@@ -253,6 +285,17 @@ const ElementClass = class {
     }
     walk(this as unknown as ElementStub)
     return found
+  }
+
+  /**
+   * Whether this element itself answers `selector`.
+   *
+   * The DOM's `matches` is how a module tests a mutation target that may BE the
+   * node it wants — an observer reports the added node, not its parent — so a
+   * stub without it cannot run such a module at all.
+   */
+  matches(selector: string): boolean {
+    return matches(this as unknown as ElementStub, selector)
   }
 
   querySelector(selector: string): ElementStub | null {

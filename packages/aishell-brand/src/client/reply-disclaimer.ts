@@ -13,22 +13,18 @@
  *
  * ## Where it sits
  *
- * The notice is the anchor's SIBLING, placed directly after it, because the
- * anchor is not one thing: it is the running status while the Turn works and the
- * Turn footer once it closes, and those two have unrelated inner layouts — the
- * status is a tight column holding one line, the footer a 16px-gap column
- * holding the action row. A child would land differently in each, and its
- * position relative to the action row would differ with it. A sibling in the
- * Turn flow has one relationship to the Turn instead of one to each anchor: the
- * line after whatever the Turn ends with.
+ * The notice is a CHILD of the anchor, inserted before the footer's action row.
+ * That is the one position that reads correctly against both anchors: the footer
+ * holds its Turn-tail slot and then the copy / like / dislike row, so the notice
+ * lands as the reply's closing line with the controls below it; the running
+ * status holds a single line, so there the notice simply follows it. Either way
+ * it sits after everything the Turn said and above the things a reader can do
+ * about it.
  *
- * Both anchors trail the Turn's content, so the notice inherits that position and
- * is the last line at all times: the status moves down as rows are admitted, and
- * the footer takes the same place when the Turn closes. It follows the answer
- * rather than being pinned somewhere a growing transcript would run into.
- *
- * The flow spaces its rows by putting `--dsh-chat-flow-gap` as a top margin on
- * each, so the notice takes that same rhythm rather than a margin of its own.
+ * Living inside the anchor rather than beside it is also what keeps the notice
+ * singular. React replaces the anchor element as a Turn streams: a child goes
+ * with the old node, while a sibling stays behind annotating an anchor that no
+ * longer exists, and the next sweep adds a second notice beside the new one.
  *
  * ## Why it is inserted rather than templated into the host's markup
  *
@@ -75,7 +71,7 @@ export interface LocaleChanges {
 export const REPLY_DISCLAIMER_MARKER = 'data-aishell-reply-disclaimer'
 
 /**
- * The anchors a notice is placed after, in the order the transcript publishes
+ * The anchors a notice is placed inside, in the order the transcript publishes
  * them: the running status while a Turn works, the Turn footer once it closes. A
  * Turn only ever has one of the two, and they occupy the same slot.
  *
@@ -102,14 +98,15 @@ function anchorsIn(root: ParentNode): Element[] {
  * so a notice styled with it would silently inherit the full-strength ink.
  */
 const NOTICE_STYLE = [
-  'display: block',
-  // The turn flow spaces its rows with `--dsh-chat-flow-gap` through a
-  // `margin-top` on each one. Sitting last, the notice takes that same rhythm
-  // rather than inventing a margin of its own.
-  'margin-top: var(--dsh-chat-flow-gap, 4px)',
-  // The action row pulls itself 6px left to tuck its ICON buttons against the
-  // column edge; a line of text belongs on the edge itself.
-  'margin-left: 0',
+  // A row, so the glyph shares the text's baseline: the shell centres a glyph
+  // beside a label this way in its own chips.
+  'display: flex',
+  'align-items: center',
+  'gap: 6px',
+  // No margin of its own. Both anchors are columns that already space their
+  // children — the footer at 16px, the status tighter — so the notice inherits
+  // that rhythm instead of adding to it.
+  'margin: 0',
   'font-size: 12px',
   'line-height: 18px',
   'font-weight: 400',
@@ -118,17 +115,79 @@ const NOTICE_STYLE = [
 ].join('; ')
 
 /**
- * Place one notice immediately after one anchor, as its sibling — or bring an
- * already-placed one up to date.
+ * The sparkle that leads the notice.
+ *
+ * The shell's own `sparkle` glyph, inlined rather than referenced: a `<use
+ * href="#dsw-icon-sparkle-regular">` would need that symbol present in the
+ * page's sprite, which this element cannot rely on — it is injected from
+ * outside the renderer that populates it. Inlining puts the geometry, the
+ * stroke weight and the `currentColor` inheritance in one place, so the glyph
+ * follows the notice's ink in either theme.
+ *
+ * Decorative, so `aria-hidden`: the text is the statement, and a screen reader
+ * announcing an unnamed sparkle would add nothing to it.
+ */
+const SPARKLE_SVG = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" '
+  + 'stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false">'
+  + '<path d="M5.875 3C5.875 6.33333 7.54167 8 10.875 8C7.54167 8 5.875 9.66667 5.875 13'
+  + 'C5.875 9.66667 4.20833 8 0.875 8C4.20833 8 5.875 6.33333 5.875 3Z"/>'
+  + '<path d="M12.375 1.55823C12.375 3.39156 13.2917 4.30823 15.125 4.30823'
+  + 'C13.2917 4.30823 12.375 5.22489 12.375 7.05823C12.375 5.22489 11.4583 4.30823 9.625 4.30823'
+  + 'C11.4583 4.30823 12.375 3.39156 12.375 1.55823Z"/>'
+  + '</svg>'
+
+/**
+ * The text node inside a notice: the label, as opposed to the glyph.
+ *
+ * A notice is the glyph's SVG followed by one text node, so the LAST text-node
+ * child is the label. Reading `textContent` instead would work for display but
+ * cannot be written back without replacing the glyph too.
+ *
+ * @param notice - a notice element.
+ * @returns its label node, or null when it has none.
+ */
+function textOf(notice: Element): { data: string } | null {
+  for (let index = notice.childNodes.length - 1; index >= 0; index -= 1) {
+    const node = notice.childNodes[index] as unknown as { nodeType?: number, data?: unknown }
+    if (node?.nodeType === 3 && typeof node.data === 'string') return node as { data: string }
+  }
+  return null
+}
+
+/**
+ * The notice that belongs to one anchor, if any.
+ *
+ * A direct-child search: the notice is a child of the anchor, and a subtree
+ * query would also descend into the notice's own inline SVG looking for a
+ * marker that only the notice itself carries.
+ *
+ * @param anchor - the running status or the Turn footer.
+ * @returns its notice, or null when it has none.
+ */
+function noticeInside(anchor: Element): Element | null {
+  for (const child of Array.from(anchor.children)) {
+    if (child.hasAttribute(REPLY_DISCLAIMER_MARKER)) return child
+  }
+  return null
+}
+
+/**
+ * Place one notice inside one anchor — or bring an already-placed one up to
+ * date.
  *
  * Both halves belong to the same call because both are triggered by the same
  * event: an anchor can come back under a different language, and re-reading the
  * text is cheaper than deciding whether it needs to be.
  *
+ * The notice goes BEFORE the anchor's trailing action row, which is what puts
+ * it under the reply and above the copy / like / dislike controls. Appending
+ * would be simpler and wrong: the footer's last child is that row.
+ *
  * @param anchor - the running status or the Turn footer.
  * @param resolve - reads the notice in the reader's current language.
  * @param factory - the owner document's createElement.
- * @param placed - every notice on the page, so the disposer can remove them.
+ * @param placed - every notice this install created, so the disposer can remove
+ *   them.
  */
 function placeNotice(
   anchor: Element,
@@ -139,28 +198,45 @@ function placeNotice(
   const text = resolve()
   // A caller with no dictionary entry for this language has nothing to say.
   if (text === '') return
-  const following = anchor.nextElementSibling
-  const existing = following !== null && following.hasAttribute(REPLY_DISCLAIMER_MARKER)
-    ? following
-    : null
+
+  const existing = noticeInside(anchor)
   if (existing !== null) {
-    // Written only when it differs, so a sweep over an unchanged Turn costs no
-    // layout.
-    if (existing.textContent !== text) existing.textContent = text
+    // Only the TEXT node is rewritten, never `textContent`: assigning that
+    // replaces every child, so it would drop the glyph and leave a bare line of
+    // text behind after any language switch. Written only when it differs, so a
+    // sweep over an unchanged Turn costs no layout.
+    const label = textOf(existing)
+    if (label !== null && label.data !== text) label.data = text
     return
   }
-  const parent = anchor.parentElement
-  // No parent means the anchor is a fragment root: nowhere for a sibling to go.
-  if (parent === null) return
+
   const notice = factory.createElement('div')
   notice.setAttribute(REPLY_DISCLAIMER_MARKER, '')
   notice.setAttribute('style', NOTICE_STYLE)
-  // Text via textContent, never innerHTML: the string comes from a locale
-  // dictionary, and a translator's apostrophe or angle bracket must not be able
-  // to change the markup.
-  notice.textContent = text
-  parent.insertBefore(notice, anchor.nextSibling)
+  // The glyph is markup from this module's own constant, never from the string.
+  notice.innerHTML = SPARKLE_SVG
+  // The text is content: a translator's apostrophe or angle bracket must not be
+  // able to change the markup, so it is a text node rather than parsed.
+  notice.appendChild(factory.createTextNode(text))
+  anchor.insertBefore(notice, actionRowOf(anchor))
   placed.add(notice)
+}
+
+/**
+ * The action row a footer ends with, when it has one.
+ *
+ * The footer's markup is `<div data-turn-tail>` holding the slot anchor for
+ * Turn-tail extensions and then the copy / branch / feedback row. The row is
+ * identified by its `data-clock` attribute — a literal the shell writes itself,
+ * unlike the class names beside it, which are CSS-module hashes.
+ *
+ * @param anchor - a Turn footer, or the running status.
+ * @returns the row to insert before, or null to append.
+ */
+function actionRowOf(anchor: Element): Element | null {
+  const row = anchor.querySelector('[data-clock]')
+  // A row that is not a direct child is not the one this positions against.
+  return row !== null && row.parentElement === anchor ? row : null
 }
 
 /**
@@ -184,8 +260,14 @@ export function installReplyDisclaimer(
 ): ReplyDisclaimerDisposer {
   if (typeof target.querySelector !== 'function') return () => {}
 
-  /** Every notice this install created. A `Set`, so a node React re-used cannot
-   *  be recorded twice as the sweep runs again. */
+  /**
+   * Every notice this install created, so the disposer can take them all away.
+   *
+   * A `Set`: the sweep meets the same notice repeatedly, and a list would grow
+   * an entry per pass. Nodes React discards stay here as dead references until
+   * dispose — small, bounded by the Turns on screen, and cheaper than tracking
+   * their removal.
+   */
   const placed = new Set<Element>()
 
   const sweep = (root: ParentNode): void => {
@@ -194,10 +276,9 @@ export function installReplyDisclaimer(
     // than `instanceof Element`: these modules run where the document is handed
     // in and the global `Element` may not exist.
     const candidate = root as unknown as { matches?: (selector: string) => boolean }
-    if (typeof candidate.matches === 'function') {
-      for (const selector of ANCHORS) {
-        if (candidate.matches(selector)) placeNotice(root as unknown as Element, resolve, target, placed)
-      }
+    const matches = candidate.matches?.bind(candidate)
+    if (matches !== undefined && ANCHORS.some((selector) => matches(selector))) {
+      placeNotice(root as unknown as Element, resolve, target, placed)
     }
     for (const anchor of anchorsIn(root)) placeNotice(anchor, resolve, target, placed)
   }

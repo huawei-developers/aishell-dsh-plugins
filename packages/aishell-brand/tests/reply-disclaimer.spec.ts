@@ -34,10 +34,30 @@ function anchor(document: Document, attribute: string, className: string): Eleme
   const element = document.createElement('div')
   element.setAttribute(attribute, '')
   element.className = className
-  // A row the anchor already holds, so appending can be told from prepending.
+  // A row the anchor already holds, so a notice's position among the anchor's
+  // own children is observable.
   const own = document.createElement('div')
   own.className = 'own-content'
   element.appendChild(own)
+  document.body.appendChild(element)
+  return element as unknown as Element
+}
+
+/**
+ * A Turn footer as the shell writes it: the Turn-tail slot anchor, then the
+ * action row.
+ */
+function footer(document: Document, turn = 1): Element {
+  const element = document.createElement('div')
+  element.className = 'footer'
+  element.setAttribute('data-turn-tail', String(turn))
+  const slot = document.createElement('div')
+  slot.setAttribute('data-slot', 'conversation.chat.turnTail')
+  const actions = document.createElement('div')
+  actions.setAttribute('data-clock', 'end')
+  actions.className = 'actions'
+  element.appendChild(slot)
+  element.appendChild(actions)
   document.body.appendChild(element)
   return element as unknown as Element
 }
@@ -47,64 +67,61 @@ function noticesIn(root: ParentNode): Element[] {
   return Array.from(root.querySelectorAll(`[${REPLY_DISCLAIMER_MARKER}]`)) as unknown as Element[]
 }
 
-/**
- * The notice that follows one anchor, if any.
- *
- * Returns null for anything else that happens to follow: with two anchors in one
- * body, the sibling after the first is the second anchor, not a notice.
- */
-function noticeAfter(anchorElement: Element): Element | null {
-  const following = anchorElement.nextElementSibling as unknown as Element | null
-  return following !== null && following.hasAttribute(REPLY_DISCLAIMER_MARKER) ? following : null
+/** The notice inside one anchor, if any. */
+function noticeInside(anchorElement: Element): Element | null {
+  return anchorElement.querySelector(`[${REPLY_DISCLAIMER_MARKER}]`) as unknown as Element | null
 }
 
 describe('installReplyDisclaimer', () => {
-  it('places the notice after the running status, as its sibling', () => {
-    // A sibling, never a child: the anchor is two different elements over the
-    // life of a Turn, with unrelated inner layouts, so a child's spacing and its
-    // position relative to the action row would differ between them.
+  it('puts the notice inside the running status', () => {
+    // Inside, not beside: the anchor is the node React replaces as a Turn
+    // streams, so a notice within it is replaced with it rather than orphaned.
     const uninstall = installStubGlobals()
     try {
       const document = makeStubDocument()
       const running = anchor(document, 'data-chat-running', 'running')
       const dispose = installReplyDisclaimer(document, () => zh['reply.disclaimer'])
 
-      const notice = noticeAfter(running)
+      const notice = noticeInside(running)
       expect(notice).not.toBeNull()
       expect(notice?.textContent).toBe(zh['reply.disclaimer'])
-      // Not inside: the status keeps its own content untouched.
-      expect(noticesIn(running)).toHaveLength(0)
-      expect(running.children).toHaveLength(1)
       dispose()
     } finally { uninstall() }
   })
 
-  it('places the notice after the Turn footer, behind the action row', () => {
+  it('places the notice below the reply and above the action row', () => {
+    // The footer's own content is the copy / like / dislike row, so appending
+    // would put the notice under the controls. It belongs above them: the
+    // reply's closing line, then the things a reader can do about it.
     const uninstall = installStubGlobals()
     try {
       const document = makeStubDocument()
-      const footer = anchor(document, 'data-turn-tail', 'footer')
+      const tail = footer(document)
       const dispose = installReplyDisclaimer(document, () => zh['reply.disclaimer'])
 
-      expect(noticeAfter(footer)?.textContent).toBe(zh['reply.disclaimer'])
-      expect(noticesIn(footer)).toHaveLength(0)
+      const notice = noticeInside(tail)
+      expect(notice).not.toBeNull()
+      // Before the row, after the Turn-tail slot.
+      const children = Array.from(tail.children) as unknown as Element[]
+      const index = children.indexOf(notice as unknown as Element)
+      const rowIndex = children.findIndex(child => child.hasAttribute('data-clock'))
+      expect(index).toBeGreaterThan(0)
+      expect(index).toBeLessThan(rowIndex)
       dispose()
     } finally { uninstall() }
   })
 
   it('adds a notice to an anchor that appears later', () => {
-    // Turns mount and unmount as the transcript grows, so the first sweep
-    // cannot be the only one.
     const uninstall = installStubGlobals()
     try {
       const document = makeStubDocument()
       const dispose = installReplyDisclaimer(document, () => en['reply.disclaimer'])
-      const late = anchor(document, 'data-chat-running', 'running')
+      const late = footer(document)
       StubMutationObserver.lastInstance?.notify([
         record({ type: 'childList', target: document.body as unknown as Node, addedNodes: [late as unknown as Node] }),
       ])
 
-      expect(noticeAfter(late)).not.toBeNull()
+      expect(noticeInside(late)).not.toBeNull()
       dispose()
     } finally { uninstall() }
   })
@@ -113,44 +130,70 @@ describe('installReplyDisclaimer', () => {
     const uninstall = installStubGlobals()
     try {
       const document = makeStubDocument()
-      const running = anchor(document, 'data-chat-running', 'running')
-      const dispose = installReplyDisclaimer(document, () => zh['reply.disclaimer'])
-      // Any unrelated insertion re-runs the sweep over a subtree that may
-      // contain this anchor again.
+      const tail = footer(document)
+      installReplyDisclaimer(document, () => zh['reply.disclaimer'])
       StubMutationObserver.lastInstance?.notify([
-        record({ type: 'childList', target: running as unknown as Node, addedNodes: [] }),
+        record({ type: 'childList', target: tail as unknown as Node, addedNodes: [] }),
       ])
 
-      expect(noticeAfter(running)).not.toBeNull()
+      expect(noticesIn(tail).length).toBe(1)
+    } finally { uninstall() }
+  })
+
+  it('leaves one notice per Turn when React replaces the anchor', () => {
+    // The failure this rules out, measured on a live page: React swaps the
+    // anchor for a fresh element, and a notice placed BESIDE the old one is left
+    // behind — still showing the language it was written in — while the next
+    // sweep adds a second beside the new anchor. Inside the anchor there is
+    // nothing to leave behind.
+    const uninstall = installStubGlobals()
+    try {
+      const document = makeStubDocument()
+      const row = document.createElement('div')
+      row.className = 'flowItem'
+      document.body.appendChild(row)
+
+      const first = document.createElement('div')
+      first.setAttribute('data-turn-tail', '1')
+      row.appendChild(first)
+      const dispose = installReplyDisclaimer(document, () => zh['reply.disclaimer'])
+      expect(noticesIn(document).length).toBe(1)
+
+      first.remove()
+      const replacement = document.createElement('div')
+      replacement.setAttribute('data-turn-tail', '1')
+      const actions = document.createElement('div')
+      actions.setAttribute('data-clock', 'end')
+      replacement.appendChild(actions)
+      row.appendChild(replacement)
+      StubMutationObserver.lastInstance?.notify([
+        record({ type: 'childList', target: row as unknown as Node, addedNodes: [replacement as unknown as Node] }),
+      ])
+
+      expect(noticesIn(document).length).toBe(1)
+      expect(noticeInside(replacement)).not.toBeNull()
       dispose()
     } finally { uninstall() }
   })
 
-  it('takes its vertical rhythm from the Turn flow', () => {
-    // The flow spaces rows with `--dsh-chat-flow-gap` as a top margin on each,
-    // so the notice takes the flow's rhythm rather than a margin of its own.
+  it('takes the anchor\'s own spacing rather than a margin of its own', () => {
+    // Both anchors are columns that already space their children. A margin here
+    // would add to that rhythm rather than follow it.
     const uninstall = installStubGlobals()
     try {
       const document = makeStubDocument()
-      const running = anchor(document, 'data-chat-running', 'running')
+      const tail = footer(document)
       installReplyDisclaimer(document, () => zh['reply.disclaimer'])
-      const notice = noticeAfter(running) as unknown as { getAttribute: (name: string) => string | null } | null
-      const style = notice?.getAttribute('style') ?? ''
-      expect(style).toContain('margin-top: var(--dsh-chat-flow-gap, 4px)')
-      // No flex `order`: a sibling needs none, and one would make the notice's
-      // position depend on the anchor's display type.
-      expect(style).not.toContain('order')
+      const style = noticeInside(tail)?.getAttribute('style') ?? ''
+      expect(style).toContain('margin: 0')
     } finally { uninstall() }
   })
 
   it('follows a language switch on a Turn already on screen', () => {
-    // The notice outlives the language that was active when it was placed, and a
-    // DOM element gets no re-render of its own: the resolver is asked again and
-    // the locale subscription re-sweeps, which is what reaches old Turns.
     const uninstall = installStubGlobals()
     try {
       const document = makeStubDocument()
-      const running = anchor(document, 'data-chat-running', 'running')
+      const tail = footer(document)
       let language: 'zh' | 'en' = 'zh'
       const listeners = new Set<() => void>()
       const dispose = installReplyDisclaimer(
@@ -158,31 +201,54 @@ describe('installReplyDisclaimer', () => {
         () => (language === 'zh' ? zh : en)['reply.disclaimer'],
         { subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } } },
       )
-      expect(noticeAfter(running)?.textContent).toBe(zh['reply.disclaimer'])
+      expect(noticeInside(tail)?.textContent).toBe(zh['reply.disclaimer'])
 
       language = 'en'
       for (const listener of listeners) listener()
-      expect(noticeAfter(running)?.textContent).toBe(en['reply.disclaimer'])
-      // Refreshed in place: the same node, not a second one.
-      expect(document.querySelectorAll(`[${REPLY_DISCLAIMER_MARKER}]`)).toHaveLength(1)
+      expect(noticeInside(tail)?.textContent).toBe(en['reply.disclaimer'])
+      expect(noticesIn(tail).length).toBe(1)
       dispose()
     } finally { uninstall() }
   })
 
-  it('re-asks the resolver on a plain sweep, too', () => {
-    // The subscription covers "nothing else mutates". A mutation must not leave
-    // the old language behind either, because that is the far more common case.
+  it('keeps the glyph when the text changes', () => {
+    // A language switch rewrites the label. Assigning `textContent` would
+    // replace every child of the notice, leaving a bare line where the glyph
+    // was — so the label is its own text node, and only that node is written.
     const uninstall = installStubGlobals()
     try {
       const document = makeStubDocument()
-      const running = anchor(document, 'data-chat-running', 'running')
+      const tail = footer(document)
+      let text: string = zh['reply.disclaimer']
+      installReplyDisclaimer(document, () => text)
+
+      const notice = noticeInside(tail) as unknown as { innerHTML: string, childNodes: unknown[] } | null
+      expect(notice?.innerHTML).toContain('<svg')
+
+      text = en['reply.disclaimer']
+      StubMutationObserver.lastInstance?.notify([
+        record({ type: 'childList', target: tail as unknown as Node, addedNodes: [] }),
+      ])
+
+      const after = noticeInside(tail) as unknown as { innerHTML: string, textContent: string } | null
+      expect(after?.textContent).toBe(en['reply.disclaimer'])
+      // Still one glyph, not zero and not two.
+      expect(after?.innerHTML?.match(/<svg/g)?.length).toBe(1)
+    } finally { uninstall() }
+  })
+
+  it('re-asks the resolver on a plain sweep, too', () => {
+    const uninstall = installStubGlobals()
+    try {
+      const document = makeStubDocument()
+      const tail = footer(document)
       let text: string = zh['reply.disclaimer']
       installReplyDisclaimer(document, () => text)
       text = en['reply.disclaimer']
       StubMutationObserver.lastInstance?.notify([
-        record({ type: 'childList', target: running as unknown as Node, addedNodes: [] }),
+        record({ type: 'childList', target: tail as unknown as Node, addedNodes: [] }),
       ])
-      expect(noticeAfter(running)?.textContent).toBe(en['reply.disclaimer'])
+      expect(noticeInside(tail)?.textContent).toBe(en['reply.disclaimer'])
     } finally { uninstall() }
   })
 
@@ -190,7 +256,7 @@ describe('installReplyDisclaimer', () => {
     const uninstall = installStubGlobals()
     try {
       const document = makeStubDocument()
-      anchor(document, 'data-chat-running', 'running')
+      footer(document)
       let subscribed = 0
       let unsubscribed = 0
       const dispose = installReplyDisclaimer(document, () => zh['reply.disclaimer'], {
@@ -203,7 +269,6 @@ describe('installReplyDisclaimer', () => {
       dispose()
       expect(subscribed).toBe(1)
       expect(unsubscribed).toBe(1)
-      // Without a source, install still works and dispose still cleans up.
       const bare = installReplyDisclaimer(document, () => zh['reply.disclaimer'])
       expect(() => { bare() }).not.toThrow()
     } finally { uninstall() }
@@ -214,16 +279,34 @@ describe('installReplyDisclaimer', () => {
     try {
       const document = makeStubDocument()
       const running = anchor(document, 'data-chat-running', 'running')
-      const footer = anchor(document, 'data-turn-tail', 'footer')
+      const tail = footer(document, 2)
       const dispose = installReplyDisclaimer(document, () => zh['reply.disclaimer'])
 
       dispose()
-      expect(noticeAfter(running)).toBeNull()
-      expect(noticeAfter(footer)).toBeNull()
+      expect(noticeInside(running)).toBeNull()
+      expect(noticeInside(tail)).toBeNull()
       // The anchors and their own content survive: an unload restores the
       // transcript, it does not empty it.
-      expect(running.children).toHaveLength(1)
-      expect(footer.children).toHaveLength(1)
+      expect(noticesIn(document).length).toBe(0)
+      expect(tail.hasAttribute('data-turn-tail')).toBe(true)
+    } finally { uninstall() }
+  })
+
+  it('leads the notice with a decorative sparkle', () => {
+    // Decorative: the text is the statement, so the glyph is hidden from the
+    // accessibility tree rather than being announced as an unnamed icon.
+    const uninstall = installStubGlobals()
+    try {
+      const document = makeStubDocument()
+      const running = anchor(document, 'data-chat-running', 'running')
+      const dispose = installReplyDisclaimer(document, () => zh['reply.disclaimer'])
+
+      const notice = noticeInside(running) as unknown as { innerHTML: string, textContent: string } | null
+      expect(notice?.innerHTML).toContain('<svg')
+      expect(notice?.innerHTML).toContain('aria-hidden="true"')
+      // The glyph is a sibling of the text, not part of it.
+      expect(notice?.textContent).toBe(zh['reply.disclaimer'])
+      dispose()
     } finally { uninstall() }
   })
 
@@ -232,12 +315,9 @@ describe('installReplyDisclaimer', () => {
     try {
       const document = makeStubDocument()
       const running = anchor(document, 'data-chat-running', 'running')
-      // A translator's apostrophe, or a string carrying an angle bracket, must
-      // not be able to open an element.
       const dispose = installReplyDisclaimer(document, () => '<b>not markup</b>')
 
-      const found = noticeAfter(running)
-      expect(found?.textContent).toBe('<b>not markup</b>')
+      expect(noticeInside(running)?.textContent).toBe('<b>not markup</b>')
       dispose()
     } finally { uninstall() }
   })
@@ -249,7 +329,7 @@ describe('installReplyDisclaimer', () => {
       const document = makeStubDocument()
       const running = anchor(document, 'data-chat-running', 'running')
       const dispose = installReplyDisclaimer(document, () => '')
-      expect(noticeAfter(running)).toBeNull()
+      expect(noticeInside(running)).toBeNull()
       dispose()
     } finally { uninstall() }
   })

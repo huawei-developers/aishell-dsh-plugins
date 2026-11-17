@@ -28,6 +28,7 @@ import { installTitleShadow } from './title-shadow.ts'
 import { installFaviconShadow } from './favicon-shadow.ts'
 import { installRunningMarkShadow } from './running-mark-shadow.ts'
 import { installRunningTextShadow } from './running-text-shadow.ts'
+import { installHomeWhaleShadow } from './home-whale-shadow.ts'
 
 /** Required services: the UI slot registry and the locale registry. */
 export const inject = ['slots', 'locale']
@@ -90,5 +91,10 @@ export function apply(ctx: ClientContext): void {
     // Running-status copy: the per-second re-rendered line is rewritten
     // from "深度求索中 / Deep diving" to "思考中 / Thinking".
     ctx.effect(() => installRunningTextShadow(document), 'aishell-brand: running text shadow')
+    // New-Session decoration: the official whale canvas is hidden. It rides a
+    // `hoc` slot, which composes every layer and lets none decline another, so
+    // there is no occupant to register over it — CSS is the lever, as with the
+    // residues above.
+    ctx.effect(() => installHomeWhaleShadow(document), 'aishell-brand: home whale shadow')
   }
 }

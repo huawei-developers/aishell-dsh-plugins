@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { LlmError, createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { CredentialsStore } from '@huaweidevtools/aishell-dsh-credentials-store'
 
 // In-memory keyring, injected below.
 //
@@ -50,9 +51,15 @@ function makeAdapter(opts?: {
   resolveAttachments?: () => unknown
   maxRequestImageBytes?: number
   baseUrl?: () => string
+  /** A store this test owns, so it can rotate the account mid-test. */
+  keyring?: CredentialsStore
+  /** Observe catalog-change notifications. */
+  onCatalogChanged?: () => void
+  /** Observe the adapter's reports about unusable catalog entries. */
+  warn?: (message: string) => void
 }): GatewayAdapter {
-  const keyring = createCredentialsStore()
-  if (!opts?.noCredentials) {
+  const keyring = opts?.keyring ?? createCredentialsStore()
+  if (!opts?.noCredentials && opts?.keyring === undefined) {
     keyring.set('HW_ACCESS_KEY', 'test-ak')
     keyring.set('HW_SECRET_KEY', 'test-sk')
   }
@@ -64,7 +71,20 @@ function makeAdapter(opts?: {
     ...(opts?.resolveAttachments === undefined
       ? {}
       : { resolveAttachments: opts.resolveAttachments as never }),
+    ...(opts?.onCatalogChanged === undefined ? {} : { onCatalogChanged: opts.onCatalogChanged }),
+    ...(opts?.warn === undefined ? {} : { warn: opts.warn }),
   })
+}
+
+/** An in-memory store a test can write to, with no machine state behind it. */
+function ownStore(credentials: Record<string, string> = {}): CredentialsStore {
+  const entries = new Map(Object.entries(credentials))
+  return {
+    get: (account: string) => entries.get(account),
+    has: (account: string) => entries.has(account),
+    set: (account: string, value: string) => { entries.set(account, value) },
+    delete: (account: string) => { entries.delete(account) },
+  }
 }
 
 /** Build a fake SSE ReadableStream from data payloads. */
@@ -112,7 +132,7 @@ describe('GatewayAdapter — providerInfo / resolveModel', () => {
     })
   })
 
-  it('resolveModel passes context window + reasoning from /models', async () => {
+  it('resolveModel passes context window + reasoning from /models, and derives the output cap', async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -120,6 +140,8 @@ describe('GatewayAdapter — providerInfo / resolveModel', () => {
           id: 'glm-5.3-flash',
           modalities: ['text', 'image'],
           reasoning_effort: ['low', 'medium', 'high'],
+          // The gateway's own completion cap, which is preferred over the
+          // window share and here is well inside what the window allows.
           limits: { context_window: 1048576, max_completion_tokens: 131072 },
         }],
       }),
@@ -129,6 +151,7 @@ describe('GatewayAdapter — providerInfo / resolveModel', () => {
     expect(info.id).toBe('glm-5.3-flash')
     expect(info.inputModalities).toEqual(['text', 'image'])
     expect(info.context).toEqual({ contextWindow: 1048576 })
+    // The advertised 131072, not the 10% share — and it is compactable.
     expect(info.defaultMaxTokens).toBe(131072)
     expect(info.reasoning?.efforts).toHaveLength(3)
     expect(info.reasoning?.efforts[0]).toEqual({ id: 'low', name: 'low' })
@@ -146,8 +169,8 @@ describe('GatewayAdapter — listModels', () => {
       ok: true,
       json: async () => ({
         data: [
-          { id: 'glm-5.3-flash', modalities: ['text', 'image'] },
-          { id: 'glm-5.2', modalities: ['text'] },
+          { id: 'glm-5.3-flash', modalities: ['text', 'image'], limits: { context_window: 1048576 } },
+          { id: 'glm-5.2', modalities: ['text'], limits: { context_window: 131072 } },
         ],
       }),
     })
@@ -176,8 +199,8 @@ describe('GatewayAdapter — listModels', () => {
       ok: true,
       json: async () => ({
         data: [
-          { id: 'trial', name: 'AI Shell 体验' },
-          { id: 'glm-5.2' },
+          { id: 'trial', name: 'AI Shell 体验', limits: { context_window: 1048576 } },
+          { id: 'glm-5.2', limits: { context_window: 131072 } },
         ],
       }),
     })
@@ -190,11 +213,15 @@ describe('GatewayAdapter — listModels', () => {
   it('resolves a labelled model to its wire name, and an unknown one to its id', async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ data: [{ id: 'trial', name: 'AI Shell 体验' }] }),
+      json: async () => ({ data: [{ id: 'trial', name: 'AI Shell 体验', limits: { context_window: 1048576 } }] }),
     })
     const adapter = makeAdapter()
     const labelled = await adapter.resolveModel('aishell', 'trial')
-    expect(labelled).toEqual({ provider: 'aishell', id: 'trial', name: 'AI Shell 体验' })
+    expect(labelled).toEqual({
+      // No declared cap here, so the 10% share applies.
+      provider: 'aishell', id: 'trial', name: 'AI Shell 体验',
+      context: { contextWindow: 1048576 }, defaultMaxTokens: 104857,
+    })
 
     // A model the catalog does not carry has no wire name to read; the id
     // stands in until the request itself is rejected with AISHELL.1004.
@@ -216,7 +243,7 @@ describe('GatewayAdapter — listModels', () => {
     try {
       fetchMock.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ data: [{ id: 'glm-5.3-flash', modalities: ['text'] }] }),
+        json: async () => ({ data: [{ id: 'glm-5.3-flash', modalities: ['text'], limits: { context_window: 1048576 } }] }),
       })
       await makeAdapter().listModels('aishell')
       const [url, init] = fetchMock.mock.calls[0]!
@@ -245,6 +272,300 @@ describe('GatewayAdapter — listModels', () => {
     const adapter = makeAdapter()
     const models = await adapter.listModels('aishell')
     expect(models).toEqual([])
+  })
+})
+
+describe('GatewayAdapter — catalog cache', () => {
+  beforeEach(() => {
+    keyringStore.clear()
+    fetchMock.mockReset()
+    // A fixed clock for the whole block, so "the catalog went stale" is one
+    // explicit step rather than a sleep. Only `Date` is faked: the listing
+    // deadline is `AbortSignal.timeout`, which runs on a native timer a faked
+    // `setTimeout` cannot drive — faking that too would leave every request
+    // waiting on the test's own real deadline.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(1_000_000)
+  })
+
+  afterEach(() => { vi.useRealTimers() })
+
+  /** One catalog answer, optionally a failure. */
+  const answering = (data: unknown[]): { ok: true, json: () => Promise<unknown> } => ({
+    ok: true,
+    json: async () => ({ data }),
+  })
+
+  /** Move the clock past the catalog TTL. Monotonic: each call advances again. */
+  const agePastTtl = (): void => { vi.setSystemTime(Date.now() + 61_000) }
+
+  /**
+   * Let a background refresh finish.
+   *
+   * It runs on promises rather than on the clock, so a test that ages the clock
+   * again straight after starting one would find the previous load still in
+   * flight and be given the catalog it already has.
+   */
+  const settle = (): Promise<void> => new Promise((resolve) => { setImmediate(resolve) })
+
+  const adapterWith = (current: () => string = () => 'test-ak'): GatewayAdapter => {
+    const gateway = makeAdapter()
+    // The adapter signs with whatever the store holds at call time, so a
+    // rotation is a store write rather than a new adapter.
+    Object.defineProperty(gateway, 'readCredentials', {
+      value: () => ({ ak: current(), sk: 'test-sk' }),
+    })
+    return gateway
+  }
+
+  it('signs one request for repeated reads inside the TTL', async () => {
+    // `listModels` and `resolveModel` both read the catalog, and a picker does
+    // both per open. Signing each one would put a network round trip behind
+    // opening a dropdown.
+    fetchMock.mockResolvedValue(answering([{ id: 'glm-5.2', limits: { context_window: 1000 } }]))
+    const adapter = makeAdapter()
+    await adapter.listModels('aishell')
+    await adapter.listModels('aishell')
+    const info = await adapter.resolveModel('aishell', 'glm-5.2')
+    expect(info.context).toEqual({ contextWindow: 1000 })
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the previous catalog when a later load fails', async () => {
+    fetchMock.mockResolvedValueOnce(answering([{ id: 'glm-5.2', limits: { context_window: 131072 } }]))
+    const adapter = makeAdapter()
+    expect(await adapter.listModels('aishell')).toHaveLength(1)
+
+    agePastTtl()
+    fetchMock.mockRejectedValueOnce(new Error('gateway down'))
+    // The stale catalog answers at once; the failed refresh lands behind it.
+    expect((await adapter.listModels('aishell')).map(m => m.id)).toEqual(['glm-5.2'])
+    await Promise.resolve()
+    expect((await adapter.listModels('aishell')).map(m => m.id)).toEqual(['glm-5.2'])
+  })
+
+  it('treats an empty listing as no answer rather than an empty catalog', async () => {
+    // A rollout can answer `{data: []}` while it lands. Replacing the catalog
+    // with that would empty the picker and strip every running Turn of its
+    // capacities; the official adapter treats it as an error for this reason.
+    fetchMock.mockResolvedValueOnce(answering([{ id: 'glm-5.2', limits: { context_window: 131072 } }]))
+    const adapter = makeAdapter()
+    await adapter.listModels('aishell')
+
+    agePastTtl()
+    fetchMock.mockResolvedValueOnce(answering([]))
+    expect((await adapter.listModels('aishell')).map(m => m.id)).toEqual(['glm-5.2'])
+    await Promise.resolve()
+    expect((await adapter.listModels('aishell')).map(m => m.id)).toEqual(['glm-5.2'])
+  })
+
+  it('answers a stale read before the refresh lands', async () => {
+    // The send path awaits `resolveModel`. Waiting for a refresh there would
+    // put a `GET /models` in front of every message once a minute.
+    fetchMock.mockResolvedValueOnce(answering([{ id: 'glm-5.2', limits: { context_window: 131072 } }]))
+    const adapter = makeAdapter()
+    await adapter.listModels('aishell')
+
+    agePastTtl()
+    const stalled = Promise.withResolvers<never>()
+    fetchMock.mockReturnValueOnce(stalled.promise as never)
+    const read = adapter.listModels('aishell')
+    // Settles without the in-flight refresh ever answering.
+    expect((await read).map(m => m.id)).toEqual(['glm-5.2'])
+    stalled.resolve({ ok: false, status: 500 } as never)
+  })
+
+  it('drops the catalog when the credentials change hands', async () => {
+    // A catalog describes one account's offering; another account's is a
+    // different list, not a stale copy of this one.
+    let account = 'first-ak'
+    fetchMock.mockResolvedValueOnce(answering([{ id: 'glm-account-one', limits: { context_window: 131072 } }]))
+    const adapter = adapterWith(() => account)
+    expect((await adapter.listModels('aishell')).map(m => m.id)).toEqual(['glm-account-one'])
+
+    account = 'second-ak'
+    fetchMock.mockResolvedValueOnce(answering([{ id: 'glm-account-two', limits: { context_window: 131072 } }]))
+    expect((await adapter.listModels('aishell')).map(m => m.id)).toEqual(['glm-account-two'])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('re-fetches as soon as credentials are saved, without a TTL wait', async () => {
+    // A save is the moment the catalog becomes readable at all, so recording
+    // the empty answer would hide the models the user just unlocked for a
+    // minute — exactly when they are opening the picker to use them.
+    const store = ownStore()
+    const adapter = makeAdapter({ keyring: store, noCredentials: true })
+    expect(await adapter.listModels('aishell')).toEqual([])
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    store.set('HW_ACCESS_KEY', 'test-ak')
+    store.set('HW_SECRET_KEY', 'test-sk')
+    fetchMock.mockResolvedValueOnce(answering([{ id: 'glm-5.2', limits: { context_window: 131072 } }]))
+    expect((await adapter.listModels('aishell')).map(m => m.id)).toEqual(['glm-5.2'])
+  })
+
+  it('resolves a model by what it last was, after the catalog stops listing it', async () => {
+    // A model leaves the catalog but a Turn is still running against it, or the
+    // user is one step from switching to it. Losing its context window would
+    // stop automatic compaction and have `compaction-basic` refuse the switch
+    // outright (`MODEL_SWITCH_COMPACTION_FAILED`).
+    fetchMock.mockResolvedValueOnce(answering([{ id: 'glm-5.2', limits: { context_window: 4096 } }]))
+    const adapter = makeAdapter()
+    await adapter.listModels('aishell')
+
+    agePastTtl()
+    fetchMock.mockResolvedValueOnce(answering([{ id: 'glm-6', limits: { context_window: 1048576 } }]))
+    // The stale catalog answers at once; the refresh that retires `glm-5.2`
+    // lands behind it, so wait for what the next read will see.
+    await adapter.listModels('aishell')
+    await settle()
+    expect((await adapter.listModels('aishell')).map(m => m.id)).toEqual(['glm-6'])
+    // It is gone from what the picker offers...
+    // ...but still resolves with the capacities it was last seen with.
+    expect((await adapter.resolveModel('aishell', 'glm-5.2')).context).toEqual({ contextWindow: 4096 })
+  })
+
+  it('reports a changed catalog once, and not for the first load', async () => {
+    const onCatalogChanged = vi.fn()
+    const gateway = makeAdapter({ onCatalogChanged })
+
+    fetchMock.mockResolvedValueOnce(answering([{ id: 'glm-5.2', limits: { context_window: 131072 } }]))
+    await gateway.listModels('aishell')
+    // The caller that prompted the first load is holding what it would reload.
+    expect(onCatalogChanged).not.toHaveBeenCalled()
+
+    agePastTtl()
+    fetchMock.mockResolvedValueOnce(answering([{ id: 'glm-5.2', limits: { context_window: 131072 } }]))
+    await gateway.listModels('aishell')
+    await settle()
+    // Same catalog: a picker would be told to reload for nothing.
+    expect(onCatalogChanged).not.toHaveBeenCalled()
+
+    agePastTtl()
+    fetchMock.mockResolvedValueOnce(answering([{ id: 'glm-5.2', limits: { context_window: 131072 } }, { id: 'glm-6', limits: { context_window: 1048576 } }]))
+    await gateway.listModels('aishell')
+    await settle()
+    expect(onCatalogChanged).toHaveBeenCalledOnce()
+  })
+
+  it('asks for the declared output cap, falling back to a share of the window', async () => {
+    // The gateway's own cap is the upstream's limit and is preferred; the share
+    // only fills in for a listing that omits it. Neither is a compaction
+    // decision — see `outputCapFor` — so this test pins the source, not a bound.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [
+          { id: 'declared', limits: { context_window: 131_072, max_completion_tokens: 4_096 } },
+          { id: 'undeclared', limits: { context_window: 131_072 } },
+          { id: 'large', limits: { context_window: 1_048_576 } },
+        ],
+      }),
+    })
+    const adapter = makeAdapter()
+
+    expect((await adapter.resolveModel('aishell', 'declared')).defaultMaxTokens).toBe(4_096)
+    // Ten percent of the window.
+    expect((await adapter.resolveModel('aishell', 'undeclared')).defaultMaxTokens).toBe(13_107)
+    expect((await adapter.resolveModel('aishell', 'large')).defaultMaxTokens).toBe(104_857)
+  })
+
+  it('never asks for more output than the window holds', async () => {
+    // The one bound this adapter can enforce from its own inputs: a request for
+    // more completion tokens than the model's whole capacity cannot be served,
+    // whoever declared it. Whether the route can COMPACT is `compaction-basic`'s
+    // question — it owns the headroom and retention settings the answer depends
+    // on — so that is deliberately not decided here.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [
+          { id: 'at-window', limits: { context_window: 131_072, max_completion_tokens: 131_072 } },
+          { id: 'over-window', limits: { context_window: 131_072, max_completion_tokens: 999_999_999 } },
+        ],
+      }),
+    })
+    const adapter = makeAdapter()
+
+    expect((await adapter.resolveModel('aishell', 'at-window')).defaultMaxTokens).toBe(131_072)
+    expect((await adapter.resolveModel('aishell', 'over-window')).defaultMaxTokens).toBe(131_072)
+  })
+
+  it('leaves out a model with no context window, and says so once', async () => {
+    // The gateway contract carries `limits.context_window` on every entry. One
+    // that does not is a defect upstream: without a capacity the harness cannot
+    // price the route, and `compaction-basic` refuses a switch to it outright
+    // (`MODEL_SWITCH_COMPACTION_FAILED`). Offering it would put a model in the
+    // picker that fails on the way to being used.
+    const warn = vi.fn()
+    const gateway = makeAdapter({ warn })
+
+    fetchMock.mockResolvedValue(answering([
+      { id: 'glm-5.2', limits: { context_window: 131072 } },
+      { id: 'glm-broken' },
+    ]))
+    expect((await gateway.listModels('aishell')).map(m => m.id)).toEqual(['glm-5.2'])
+    expect(warn).toHaveBeenCalledOnce()
+    expect(warn.mock.calls[0]![0]).toContain('glm-broken')
+    expect(warn.mock.calls[0]![0]).toContain('limits.context_window')
+
+    // Every refresh sees the defect again; reporting it each time would bury
+    // the line in its own repetition.
+    agePastTtl()
+    await gateway.listModels('aishell')
+    await settle()
+    expect(warn).toHaveBeenCalledOnce()
+  })
+
+  it('drops a model that went malformed from the picker, and still resolves its last good capacity', async () => {
+    // The two halves of the record answer different questions: `models` is
+    // what the picker OFFERS, `known` is what is TRUE about a model. A model
+    // the gateway stopped describing properly is no longer offerable, but a
+    // Turn running against it still needs the capacity it was listed with.
+    const gateway = makeAdapter()
+    fetchMock.mockResolvedValueOnce(answering([{ id: 'glm-5.2', limits: { context_window: 4096 } }]))
+    await gateway.listModels('aishell')
+
+    agePastTtl()
+    fetchMock.mockResolvedValueOnce(answering([{ id: 'glm-5.2' }]))
+    await gateway.listModels('aishell')
+    await settle()
+
+    expect(await gateway.listModels('aishell')).toEqual([])
+    expect((await gateway.resolveModel('aishell', 'glm-5.2')).context).toEqual({ contextWindow: 4096 })
+  })
+
+  it('does not let a malformed entry overwrite what the model was last listed with', async () => {
+    // `known` is what keeps a just-retired model's capacity alive. A reading
+    // that has no capacity to offer must not replace one that did — that would
+    // lose exactly what the index exists to preserve.
+    const gateway = makeAdapter()
+    fetchMock.mockResolvedValueOnce(answering([{ id: 'glm-5.2', limits: { context_window: 4096 } }]))
+    await gateway.listModels('aishell')
+
+    agePastTtl()
+    fetchMock.mockResolvedValueOnce(answering([{ id: 'glm-5.2' }]))
+    await gateway.listModels('aishell')
+    await settle()
+
+    expect((await gateway.resolveModel('aishell', 'glm-5.2')).context).toEqual({ contextWindow: 4096 })
+  })
+
+  it('reports a re-costed model as a change', async () => {
+    // A model staying in the catalog with a new context window or reasoning
+    // ladder is the same kind of change as one appearing: the picker shows
+    // both, so comparing ids alone would miss it.
+    const onCatalogChanged = vi.fn()
+    const gateway = makeAdapter({ onCatalogChanged })
+
+    fetchMock.mockResolvedValueOnce(answering([{ id: 'glm-5.2', limits: { context_window: 4096 } }]))
+    await gateway.listModels('aishell')
+
+    agePastTtl()
+    fetchMock.mockResolvedValueOnce(answering([{ id: 'glm-5.2', limits: { context_window: 8192 } }]))
+    await gateway.listModels('aishell')
+    await settle()
+    expect(onCatalogChanged).toHaveBeenCalledOnce()
   })
 })
 
@@ -346,7 +667,7 @@ describe('GatewayAdapter — stream', () => {
     // after this one signed GET).
     fetchMock.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ data: [{ id: 'glm-5.3-flash' }] }),
+      json: async () => ({ data: [{ id: 'glm-5.3-flash', limits: { context_window: 1048576 } }] }),
     })
     const error = await adapter.stream(baseOptions)[Symbol.asyncIterator]().next().then(
       () => { throw new Error('expected the stream to reject') },
@@ -370,7 +691,7 @@ describe('GatewayAdapter — stream', () => {
     })
     fetchMock.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ data: [{ id: 'glm-5.3-flash' }] }),
+      json: async () => ({ data: [{ id: 'glm-5.3-flash', limits: { context_window: 1048576 } }] }),
     })
     const error = await adapter.stream(baseOptions)[Symbol.asyncIterator]().next().then(
       () => { throw new Error('expected the stream to reject') },

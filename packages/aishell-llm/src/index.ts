@@ -98,6 +98,11 @@ export { PROVIDER_DISPLAY_NAME } from './provider-name.ts'
 
 export function apply(ctx: Context, config: Config): void {
   const store = createCredentialsStore()
+  // Set when this plugin is unloaded. A catalog refresh outlives the fiber that
+  // started it, so a load that settles afterwards must not emit into a context
+  // whose listeners are being disposed.
+  let disposed = false
+  ctx.effect(() => () => { disposed = true }, 'aishell-llm: catalog notification lifetime')
   // Every value below is read through a thunk, not captured: this Config is
   // entirely Volatile, so an edit is a volatile-only loader update that commits
   // into the same references and returns without re-running apply()
@@ -117,6 +122,19 @@ export function apply(ctx: Context, config: Config): void {
       maxBytes: config.requestImageMaxBytes.get(),
     }),
     resolveMaxRequestImageBytes: () => config.maxRequestImageBytes.get(),
+    // The catalog is the gateway's, so its changes are the gateway's to
+    // announce. `llm/models-updated` is forwarded to the browser and every open
+    // picker refetches on it, which is what carries an added, retired, or
+    // re-costed model into a selector without a page reload — and what surfaces
+    // a removed reasoning effort before a saved selection fails on it.
+    onCatalogChanged: () => {
+      if (disposed) return
+      ctx.emit('llm/models-updated', PROVIDER)
+    },
+    // The adapter holds no context of its own, so the logger comes from here.
+    // A gateway entry the adapter cannot serve is reported through it once per
+    // model id (see `GatewayAdapter.rejectUnusable`).
+    warn: (message: string) => { ctx.logger.warn(message) },
   })
   ctx.llm.registerAdapter([PROVIDER], adapter)
   // The configurable-provider directory is what the Models page joins with the

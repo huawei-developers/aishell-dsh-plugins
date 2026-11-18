@@ -40,10 +40,20 @@ interface AdapterRegistration {
 /** One directory registration the stubbed llm service recorded. */
 let directory: LlmConfigurableProvider[] | undefined
 
+/** Every event the stub context was asked to publish. */
+let emitted: string[] = []
+/** Every warning the plugin routed to `ctx.logger`. */
+let warned: string[] = []
+/** The disposers apply() registered, so a test can unload the plugin. */
+let teardown: (() => void)[] = []
+
 /** Minimal Context exposing only what apply() touches. */
 function makeCtx(entryId: string | undefined): { ctx: never, registered: AdapterRegistration[] } {
   const registered: AdapterRegistration[] = []
   directory = undefined
+  emitted = []
+  warned = []
+  teardown = []
   const ctx = {
     fiber: entryId === undefined
       ? {}
@@ -58,7 +68,12 @@ function makeCtx(entryId: string | undefined): { ctx: never, registered: Adapter
         return () => { directory = undefined }
       },
     },
-    effect: (fn: () => (() => void) | void) => { fn() },
+    effect: (fn: () => (() => void) | void) => {
+      const disposer = fn()
+      if (typeof disposer === 'function') teardown.push(disposer)
+    },
+    emit: (event: string) => { emitted.push(event) },
+    logger: { warn: (message: string) => { warned.push(message) } },
   }
   return { ctx: ctx as never, registered }
 }
@@ -93,6 +108,33 @@ describe('aishell-llm — apply registrations', () => {
     const { ctx } = makeCtx(undefined)
     apply(ctx, Config({}))
     expect(directory?.[0]?.settingsNs).toBe('aishell-llm')
+  })
+
+  it('announces a catalog change as llm/models-updated, and stops once unloaded', () => {
+    // The browser refetches every open picker on this event, so it is what
+    // carries an added, retired, or re-costed model to a selector — and what
+    // shows a removed reasoning effort before a saved selection fails on it.
+    const { ctx, registered } = makeCtx('aishell-llm')
+    apply(ctx, Config({}))
+    const adapter = registered[0]!.adapter as { opts: { onCatalogChanged?: () => void } }
+
+    adapter.opts.onCatalogChanged?.()
+    expect(emitted).toEqual(['llm/models-updated'])
+
+    // A listing refresh outlives the fiber that started it, so a load settling
+    // after unload must not emit into a context whose listeners are going away.
+    for (const dispose of teardown) dispose()
+    adapter.opts.onCatalogChanged?.()
+    expect(emitted).toEqual(['llm/models-updated'])
+  })
+
+  it('routes an unusable-catalog report through the Host logger', () => {
+    const { ctx, registered } = makeCtx('aishell-llm')
+    apply(ctx, Config({}))
+    const adapter = registered[0]!.adapter as { opts: { warn?: (m: string) => void } }
+
+    adapter.opts.warn?.('gateway model "glm-broken" declares no limits.context_window')
+    expect(warned).toEqual(['gateway model "glm-broken" declares no limits.context_window'])
   })
 
   it('reads its endpoint from the Config schema, whose defaults serve an empty profile', () => {

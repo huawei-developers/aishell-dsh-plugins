@@ -121,9 +121,34 @@ export interface WireModel {
   pricing?: WireModelPricing
 }
 
+/**
+ * The gateway's token limits for one model.
+ *
+ * Declared in full because they are part of the gateway's documented `/models`
+ * shape, and dropping them would make this type describe a response the gateway
+ * does not send.
+ *
+ * `context_window` anchors everything: compaction prices a route against it,
+ * and the request's output budget is derived from it (see `outputCapFor` in
+ * `./adapter.ts`).
+ *
+ * The other two are advisory. The gateway is a reverse proxy and enforces
+ * neither, so both are clamped against the window before use — a declared value
+ * above what the window leaves would otherwise produce a route that cannot
+ * compact.
+ */
 export interface WireModelLimits {
+  /** Total tokens one request may occupy, prompt and completion together. */
   context_window?: number
+  /**
+   * Advertised prompt ceiling. Not read: no part of the harness enforces one,
+   * and compaction already bounds the prompt from `context_window`.
+   */
   max_prompt_tokens?: number
+  /**
+   * Advertised completion ceiling. Preferred over the window share when
+   * declared, then clamped so the route stays compactable.
+   */
   max_completion_tokens?: number
 }
 

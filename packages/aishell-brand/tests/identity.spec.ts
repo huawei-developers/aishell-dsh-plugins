@@ -27,7 +27,9 @@
 import { describe, it, expect } from 'vitest'
 import { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 
-const { apply, IDENTITY_PROMPT, IDENTITY_SECTION_NAME } = await import('../src/index.ts')
+const {
+  apply, IDENTITY_PROMPT, IDENTITY_SECTION_NAME, INSTALLATION_PROMPT, INSTALLATION_SECTION_NAME,
+} = await import('../src/index.ts')
 
 /** One registered section, as the stubbed service received it. */
 interface RegisteredSection {
@@ -85,15 +87,18 @@ describe('aishell-brand — the identity section', () => {
     expect(mod.inject).toEqual([])
   })
 
-  it('registers exactly one section', () => {
+  it('registers the identity and the configuration rule together', () => {
     const { ctx, sections } = makeCtx()
     apply(ctx)
 
-    expect(sections).toHaveLength(1)
-    expect(sections[0]?.name).toBe(IDENTITY_SECTION_NAME)
+    expect(sections.map(section => section.name)).toEqual([
+      IDENTITY_SECTION_NAME, INSTALLATION_SECTION_NAME,
+    ])
     // Not spelled as a number: the order is read from the service so the
-    // section keeps the opener's slot if the framework ever moves it.
+    // identity keeps the opener's slot if the framework ever moves it, and the
+    // rule follows it.
     expect(sections[0]?.order).toBe(-1000)
+    expect(sections[1]?.order).toBe(-999)
   })
 
   it('takes the harness identity slot, not merely a negative number', async () => {
@@ -159,6 +164,27 @@ describe('aishell-brand — the identity section', () => {
       variables: {},
     })
     expect(rendered).toBe(IDENTITY_PROMPT)
+  })
+
+  it('renders the installation rule after the identity, through the real renderer', () => {
+    // The rule is prose in the same slot neighbourhood, so it goes through the
+    // same interpolation-off path: a `{{` in it would otherwise kill the turn.
+    const { ctx, sections } = makeCtx()
+    apply(ctx)
+
+    const rendered = renderPrompt({
+      sections: sections.map(section => ({
+        name: section.name,
+        text: section.text as string,
+        ...(section.interpolate === undefined ? {} : { interpolate: section.interpolate }),
+      })),
+      contexts: [],
+      tools: [],
+      variables: {},
+    })
+    expect(rendered).toContain(IDENTITY_PROMPT)
+    expect(rendered).toContain(INSTALLATION_PROMPT)
+    expect(rendered.indexOf(IDENTITY_PROMPT)).toBeLessThan(rendered.indexOf(INSTALLATION_PROMPT))
   })
 
   it('survives a brace in the text, because the scan is off', () => {

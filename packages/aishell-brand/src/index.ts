@@ -14,13 +14,16 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { registerIdentityPrompt } from './prompt.ts'
+import { registerDeploymentPrompt } from './prompt.ts'
 
-export { IDENTITY_PROMPT, IDENTITY_SECTION_NAME } from './prompt.ts'
+export {
+  INSTALLATION_PROMPT, INSTALLATION_SECTION_NAME,
+  IDENTITY_PROMPT, IDENTITY_SECTION_NAME,
+} from './prompt.ts'
 
 export const name = 'aishell-brand'
 export const inject: readonly string[] = []
 
 export function apply(ctx: Context): void {
-  registerIdentityPrompt(ctx)
+  registerDeploymentPrompt(ctx)
 }

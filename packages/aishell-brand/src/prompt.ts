@@ -1,5 +1,8 @@
 /**
- * What the model reads about what it is.
+ * What the model reads about this deployment.
+ *
+ * Two statements, both about what this assistant is running as: what it calls
+ * itself, and that what it is made of is not its to change.
  *
  * ## Why this is its own module
  *
@@ -8,7 +11,7 @@
  * `index.ts` — the string one place, the `systemPrompt.section()` call another
  * — the only way to see what the model actually reads is to read both. Here
  * they sit side by side, and `apply()` just calls
- * {@link registerIdentityPrompt}.
+ * {@link registerDeploymentPrompt}.
  *
  * ## Why the brand plugin owns the model's self-introduction
  *
@@ -18,6 +21,12 @@
  * deployment that rebrands the shell for its users and leaves the model
  * introducing itself as the un-rebranded harness splits one identity across
  * two owners, and the two drift independently.
+ *
+ * The installation rule belongs beside it for the same reason. Plugin
+ * management is a tool the model may reach for, and the remedy it offers is
+ * the one that breaks this product; stating the limit where the product is
+ * introduced is what keeps it a fact about the deployment rather than a rule
+ * each owning plugin has to remember to repeat.
  *
  * ## Why the order is the harness identity's own slot
  *
@@ -30,6 +39,9 @@
  * a deployment that leaves the fixed opener on renders both, and the name
  * (`aishell:identity`, not `harness:identity`) keeps the pair two sections
  * rather than one shadowing the other.
+ *
+ * The rule follows one slot later: it is the next thing a reader needs to know,
+ * and both are short.
  *
  * ## What the text does not say
  *
@@ -50,6 +62,9 @@ import type {} from '@deepseek-ai/dsh-system-prompt'
 /** Name this contribution registers under; unique across the assembled prompt. */
 export const IDENTITY_SECTION_NAME = 'aishell:identity'
 
+/** Name of the installation rule, registered beside the identity. */
+export const INSTALLATION_SECTION_NAME = 'aishell:installation'
+
 /**
  * What the model reads about what it is.
  *
@@ -66,15 +81,25 @@ export const IDENTITY_SECTION_NAME = 'aishell:identity'
 export const IDENTITY_PROMPT = `You are AI Shell, an assistant that genuinely gets the user's work done, with particular strength in deploying and operating Huawei Cloud resources. You are powered by DeepSeek Harness (DSH), and the user can extend your abilities by installing DSH-compatible plugins.`
 
 /**
- * Register the identity section.
+ * What the model reads about changing what AI Shell is made of.
+ *
+ * The rule is one sentence because the reason is: these plugins only work as a
+ * set, so a change to one can leave a shell that does not answer, and the
+ * failure surfaces later somewhere that does not point back at the edit. The
+ * model reports what it found rather than reaching for the remedy itself.
+ */
+export const INSTALLATION_PROMPT = `Do not change AI Shell's configuration or its plugins. They only work as installed — changing or removing one can leave AI Shell unable to answer. If something is wrong, just say what you found.`
+
+/**
+ * Register both statements.
  *
  * Deferred behind `ctx.inject` rather than declared in this plugin's own
- * `inject`: the section is an enhancement, and a deployment without a system
- * prompt should lose it rather than fail to mount.
+ * `inject`: the sections are an enhancement, and a deployment without a system
+ * prompt should lose them rather than fail to mount.
  *
  * @param ctx - host context.
  */
-export function registerIdentityPrompt(ctx: Context): void {
+export function registerDeploymentPrompt(ctx: Context): void {
   ctx.inject(['systemPrompt'], (scope) => {
     scope.systemPrompt.section({
       name: IDENTITY_SECTION_NAME,
@@ -89,6 +114,15 @@ export function registerIdentityPrompt(ctx: Context): void {
       // switched off rather than left to luck.
       interpolate: false,
       text: IDENTITY_PROMPT,
+    })
+
+    // One slot after the introduction. The same interpolate reasoning applies:
+    // this text is prose with no variables either.
+    scope.systemPrompt.section({
+      name: INSTALLATION_SECTION_NAME,
+      order: scope.systemPrompt.getSectionOrder('HARNESS_IDENTITY') + 1,
+      interpolate: false,
+      text: INSTALLATION_PROMPT,
     })
   })
 }

@@ -38,6 +38,55 @@
 /** Whether mutations are permitted. */
 export type PermissionMode = "read_only" | "read_write";
 
+/** Who set the mode. */
+export type PermissionActor = "user" | "startup";
+
+/** One recorded mode change. */
+export interface PermissionChange {
+  /**
+   * The mode before the change, or `undefined` when the process started in
+   * this one.
+   *
+   * A startup mode has no predecessor: it was not reached from another mode,
+   * and naming one would record a transition that never happened.
+   */
+  readonly previous: PermissionMode | undefined;
+  readonly mode: PermissionMode;
+  /** The person at the console, or the configuration the process started with. */
+  readonly actor: PermissionActor;
+}
+
+/**
+ * Records one change; installed by the plugin, which owns the audit service.
+ *
+ * A module-level hook rather than an import of the audit service: this module is
+ * pure state with no context, so it cannot reach `ctx.audit` itself. The plugin
+ * installs the recorder at startup, and an uninstalled recorder is silent —
+ * `setMode` runs in tests and before the plugin is applied, neither of which is
+ * a reason for a mode change to fail.
+ */
+let recordChange: ((change: PermissionChange) => void) | undefined;
+
+/**
+ * Install the recorder for mode changes.
+ *
+ * One recorder at a time: a second install replaces the first rather than
+ * joining it. A trail must not depend on how many times a plugin was loaded,
+ * and two recorders would write every change twice.
+ *
+ * @param record - receives every real change, or `undefined` to stop recording.
+ * @returns the disposer, which stops recording only if this is still the
+ *   installed recorder — a late dispose cannot uninstall a successor.
+ */
+export function installPermissionRecorder(
+  record: ((change: PermissionChange) => void) | undefined,
+): () => void {
+  recordChange = record;
+  return () => {
+    if (recordChange === record) recordChange = undefined;
+  };
+}
+
 /**
  * Environment variable holding the startup default.
  *
@@ -79,8 +128,18 @@ export function parseMode(value: string | undefined): PermissionMode | undefined
   }
 }
 
+/**
+ * The mode this process started in.
+ *
+ * Resolved once, at load. The environment variable is an operator's input to a
+ * running process, not a live setting: re-reading it would let a runtime change
+ * of the variable move the "startup default" that `resetMode` restores and that
+ * `/permission/get_mode` reports, which is a fact about the past.
+ */
+const STARTUP_MODE: PermissionMode = parseMode(process.env[DEFAULT_MODE_ENV]) ?? FALLBACK_MODE;
+
 /** Current mode. Module-level state — one server instance per connection. */
-let current: PermissionMode = parseMode(process.env[DEFAULT_MODE_ENV]) ?? FALLBACK_MODE;
+let current: PermissionMode = STARTUP_MODE;
 
 /** The mode in effect. */
 export function getMode(): PermissionMode {
@@ -90,12 +149,29 @@ export function getMode(): PermissionMode {
 /**
  * Set the mode.
  *
+ * ## Why the notification lives here
+ *
+ * Every change passes through this function, so notifying here is what makes
+ * the record gapless. A separate call each caller has to remember would leave a
+ * change unrecorded the first time someone added a caller and forgot — and a
+ * trail with a gap is worse than none, because it reads as complete.
+ *
+ * A re-assertion of the mode already in force is not a change and is not
+ * notified: the chip re-reads the state after every call, and recording those
+ * would fill the trail with actions nobody took.
+ *
  * @param mode - the mode to apply.
+ * @param actor - who is setting it; the route is the only production caller, so
+ *   the default is the person at the console.
  * @returns the previous mode, for a change log.
  */
-export function setMode(mode: PermissionMode): PermissionMode {
+export function setMode(
+  mode: PermissionMode,
+  actor: PermissionActor = "user",
+): PermissionMode {
   const previous = current;
   current = mode;
+  if (previous !== mode) recordChange?.({ previous, mode, actor });
   return previous;
 }
 
@@ -105,15 +181,17 @@ export function writesAllowed(): boolean {
 }
 
 /**
- * Reset to the startup default.
+ * Reset to the startup default, without recording.
  *
- * Used by tests, which must not leak a mode change into the next case.
+ * A test affordance: it restores the state the module is initialised with, so
+ * it is not an event in the process's history and there is nothing for an audit
+ * trail to say about it.
  */
 export function resetMode(): void {
-  current = parseMode(process.env[DEFAULT_MODE_ENV]) ?? FALLBACK_MODE;
+  current = STARTUP_MODE;
 }
 
-/** Startup default, for logging and for `permission/get_mode`. */
+/** The mode this process started in, for logging and for `permission/get_mode`. */
 export function defaultMode(): PermissionMode {
-  return parseMode(process.env[DEFAULT_MODE_ENV]) ?? FALLBACK_MODE;
+  return STARTUP_MODE;
 }

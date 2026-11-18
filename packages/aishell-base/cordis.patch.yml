@@ -55,6 +55,11 @@
     - id: aishell-qr
       name: '@huaweidevtools/aishell-dsh-qr'
 
+# from ../aishell-audit
+- insert:
+    - id: aishell-audit
+      name: '@huaweidevtools/aishell-dsh-audit'
+
 # overridden upstream rows (id-targeted; this layer applies after the official bundles)
 - id: agent-default-model
   config: { provider: aishell, model: trial }

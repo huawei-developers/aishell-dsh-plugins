@@ -8,6 +8,7 @@
     "src"
   ],
   "references": [
+    { "path": "../aishell-audit" },
     { "path": "../credentials-store" }
   ]
 }

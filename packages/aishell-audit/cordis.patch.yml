@@ -1,0 +1,10 @@
+# aishell-audit bundle patch: provides the audit service.
+# Install standalone: `dsh plugin --profile <name> add @huaweidevtools/aishell-dsh-audit`
+#
+# One host-only row. It offers `ctx.audit`, which other plugins call to record
+# actions that are not conversation — a permission grant, an account change —
+# and writes them to the Host log. Nothing here reads a network, holds a
+# credential, or has a browser half.
+- insert:
+    - id: aishell-audit
+      name: '@huaweidevtools/aishell-dsh-audit'

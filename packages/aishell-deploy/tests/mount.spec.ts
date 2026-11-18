@@ -41,6 +41,15 @@ vi.mock('@huaweidevtools/aishell-dsh-credentials-store', async (importOriginal) 
   }
 })
 
+/** The settings document's `aishell-client-credentials` value, as it holds it. */
+let credentialsSettings: Record<string, unknown> | undefined
+
+/** Audit records the plugin wrote, when the audit service is mounted. */
+let auditRecords: Array<Record<string, unknown>> = []
+
+/** The audit service a mounted deployment provides, or `undefined`. */
+let auditService: { record: (event: Record<string, unknown>) => void } | undefined
+
 /** Definitions registered on the stubbed tool registry. */
 let definitions: Array<{
   name: string
@@ -89,6 +98,20 @@ function makeCtx(): { ctx: never, logger: { info: ReturnType<typeof vi.fn>, warn
     // made it a property would pass a different call shape than the real one.
     logger: () => logger,
     effect: (fn: () => (() => void)) => { fn() },
+    // Services resolve through `ctx.get`. `audit` is present unless a test
+    // says otherwise: its absence is its own case (see permission-audit.spec).
+    // `settings` exposes only what this plugin reads from it.
+    get: (name: string) => {
+      if (name === 'audit') return auditService
+      if (name === 'settings') {
+        return {
+          describe: () => credentialsSettings === undefined
+            ? []
+            : [{ ns: 'aishell-client-credentials', value: credentialsSettings }],
+        }
+      }
+      return undefined
+    },
     tools: {
       // Scoped lookup, as the real registry provides. Two ways a tool is not
       // visible, and they are different cases: a scope in `restrictedScopes`
@@ -124,8 +147,17 @@ function makeCtx(): { ctx: never, logger: { info: ReturnType<typeof vi.fn>, warn
     },
     // The real service resolves `ctx.inject` immediately when the dependency is
     // present, which is the case this stub models.
-    inject: (_deps: string[], fn: (scope: unknown) => void) => {
+    // `ctx.inject(deps, cb)` runs `cb` with a child context that has the
+    // requested services. Two are requested by this plugin, and each test shape
+    // decides what the child sees: the prompt scope always exists, and `audit`
+    // exists only when the test mounted the audit plugin.
+    inject: (deps: string[], fn: (scope: unknown) => void) => {
+      if (deps.includes('audit') && auditService === undefined) return
       fn({
+        effect: (effect: () => (() => void)) => { effect() },
+        ...(deps.includes('audit') && auditService !== undefined
+          ? { audit: auditService }
+          : {}),
         systemPrompt: {
           context: (contribution: { name: string, order: number, text: () => string }) => {
             policyContext = contribution
@@ -178,7 +210,48 @@ beforeEach(() => {
   workflowSection = undefined
   restrictedScopes = new Set()
   hiddenTools = new Set()
+  auditRecords = []
+  auditService = { record: (event) => { auditRecords.push(event) } }
+  credentialsSettings = undefined
   modeModule.resetMode()
+})
+
+describe('aishell-deploy — permission audit subject', () => {
+  /** Trigger one audited switch with the given account state. */
+  const switchMode = (ak: string | undefined, name: string | undefined): Record<string, unknown> => {
+    credentials.clear()
+    if (ak !== undefined) writeHuaweiCloud(store, { ak, sk: 'SK1' })
+    credentialsSettings = name === undefined ? undefined : { accessKeyIdHint: name }
+    auditRecords = []
+    apply(makeCtx().ctx, makeConfig())
+    modeModule.setMode('read_write')
+    return auditRecords[0]!
+  }
+
+  it('names the account and masks the key in the middle', () => {
+    // The account name is what a reader recognises; the masked key is what
+    // identifies it across records without the whole key persisting in a file.
+    expect(switchMode('AKIDEXAMPLEVALUE', 'prod-account'))
+      .toMatchObject({ subject: 'prod-account(AKID****ALUE)' })
+  })
+
+  it('falls back to the masked key when no account name has been recorded', () => {
+    // The credentials plugin may not be mounted, and its first verification may
+    // not have landed. The key still identifies the account, so the subject is
+    // never absent.
+    expect(switchMode('AKIDEXAMPLEVALUE', undefined))
+      .toMatchObject({ subject: '(AKID****ALUE)' })
+  })
+
+  it('does not label an action that had no credential at all', () => {
+    // A switch made while signed out governed no account; naming one would be
+    // an attribution the record cannot support.
+    expect(switchMode(undefined, undefined)).not.toHaveProperty('subject')
+  })
+
+  it('never shows a short key in full', () => {
+    expect(switchMode('SHORT', 'acct')).toMatchObject({ subject: 'acct(****)' })
+  })
 })
 
 describe('aishell-deploy — mount', () => {

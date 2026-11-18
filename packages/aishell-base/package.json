@@ -35,7 +35,8 @@
     "@huaweidevtools/aishell-dsh-e2b": "workspace:*",
     "@huaweidevtools/aishell-dsh-deeplink": "workspace:*",
     "@huaweidevtools/aishell-dsh-share": "workspace:*",
-    "@huaweidevtools/aishell-dsh-qr": "workspace:*"
+    "@huaweidevtools/aishell-dsh-qr": "workspace:*",
+    "@huaweidevtools/aishell-dsh-audit": "workspace:*"
   },
   "scripts": {
     "prepublishOnly": "node ../../scripts/check-packages.mjs --prepublish --only aishell-base"

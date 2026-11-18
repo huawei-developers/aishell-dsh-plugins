@@ -39,11 +39,33 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.20.5)(lightningcss@1.33.0)
 
+  packages/aishell-audit:
+    dependencies:
+      '@huaweidevtools/aishell-dsh-credentials-store':
+        specifier: workspace:*
+        version: link:../credentials-store
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: ^4.1.0
+        version: 4.1.0(@deepseek-ai/cordis-plugin-include@1.1.0)(@deepseek-ai/cordis-plugin-loader@1.1.0)
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.5
+      tsdown:
+        specifier: ^0.10.0
+        version: 0.10.2(typescript@5.9.3)
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/aishell-base:
     dependencies:
       '@deepseek-ai/dsh-base':
         specifier: 0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3
         version: 0.2.2-rc.3(e4af06601837eea6c95f0c0113d05ffb)
+      '@huaweidevtools/aishell-dsh-audit':
+        specifier: workspace:*
+        version: link:../aishell-audit
       '@huaweidevtools/aishell-dsh-brand':
         specifier: workspace:*
         version: link:../aishell-brand
@@ -238,6 +260,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: 0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3
         version: 0.2.2-rc.3(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-error@0.2.2-rc.3(@deepseek-ai/cordis@4.1.0))
+      '@deepseek-ai/dsh-settings':
+        specifier: 0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3
+        version: 0.2.2-rc.3(d8422040b9706114b984e3e3cf213016)
       '@deepseek-ai/dsh-system-prompt':
         specifier: 0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3
         version: 0.2.2-rc.3(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-llm@0.2.2-rc.3(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-error@0.2.2-rc.3(@deepseek-ai/cordis@4.1.0)))(@deepseek-ai/dsh-scope@0.2.2-rc.3(@deepseek-ai/cordis@4.1.0))
@@ -247,6 +272,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: 3.19.0
         version: 3.19.0
+      '@huaweidevtools/aishell-dsh-audit':
+        specifier: workspace:*
+        version: link:../aishell-audit
       tsdown:
         specifier: ^0.10.0
         version: 0.10.2(typescript@5.9.3)

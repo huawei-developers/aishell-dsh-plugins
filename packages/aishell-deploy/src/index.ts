@@ -50,8 +50,15 @@ import { createCredentialsStore } from '@huaweidevtools/aishell-dsh-credentials-
 import { createRegistrar, toToolDefinition } from './bridge.ts'
 import { registerAllTools } from './tools/index.ts'
 import { configureCredentials, forgetAccount } from './credentials.ts'
-import { clearCredentials } from '@huaweidevtools/aishell-dsh-credentials-store/accounts'
-import { defaultMode, getMode, setMode, writesAllowed } from './permission/mode.ts'
+import { clearCredentials, readStoredPair } from '@huaweidevtools/aishell-dsh-credentials-store/accounts'
+import {
+  defaultMode, getMode, installPermissionRecorder, setMode, writesAllowed,
+  type PermissionChange,
+} from './permission/mode.ts'
+import type {} from '@huaweidevtools/aishell-dsh-audit'
+// Type-only: pulls the ctx.settings merge, so the account name another plugin
+// recorded can be read from the shared settings document.
+import type {} from '@deepseek-ai/dsh-settings'
 import { createPermissionRoutes, PERMISSION_PATH } from './permission-route.ts'
 import { registerPermissionPolicyContext } from './permission-context.ts'
 import { registerDeployWorkflow } from './prompt.ts'
@@ -73,6 +80,47 @@ import { registerDeployWorkflow } from './prompt.ts'
  * stops the process from surviving a stall.
  */
 const DEFAULT_TOOL_CALL_TIMEOUT_MS = 10 * 60 * 1000
+
+/**
+ * Settings namespace `aishell-credentials` records the verified account name
+ * under.
+ *
+ * Its Loader row id, which is what the settings document keys a profile entry
+ * by. Named here rather than imported: the two plugins share a document, not a
+ * module, and a constant is a smaller coupling than a package dependency.
+ */
+const CREDENTIALS_SETTINGS_NS = 'aishell-client-credentials'
+
+/**
+ * How much of an access key an audit record shows.
+ *
+ * Four characters at each end. Access keys are long and opaque, so the leading
+ * and trailing runs are what a person comparing a record against a console
+ * recognises, while the middle stays out of a file that persists.
+ */
+const AK_VISIBLE_HEAD = 4
+const AK_VISIBLE_TAIL = 4
+
+/**
+ * The subject an audit record names: the account, with the key masked.
+ *
+ * `name(AKID****WXYZ)`, or `(AKID****WXYZ)` when the account name is not known
+ * — no credentials plugin mounted, or its first verification has not landed.
+ * The masked key alone still identifies the account across records, so the
+ * subject never has to be absent.
+ *
+ * @param accessKey - the stored access key.
+ * @param name - the account name, when one has been verified.
+ * @returns the label.
+ */
+function auditSubject(accessKey: string, name: string | undefined): string {
+  // A key shorter than the two visible runs would be shown in full; the mask
+  // is the point, so such a key is not labelled at all.
+  const masked = accessKey.length > AK_VISIBLE_HEAD + AK_VISIBLE_TAIL
+    ? `${accessKey.slice(0, AK_VISIBLE_HEAD)}****${accessKey.slice(-AK_VISIBLE_TAIL)}`
+    : '****'
+  return name === undefined ? `(${masked})` : `${name}(${masked})`
+}
 
 /** Plugin config. */
 export interface Config {
@@ -194,12 +242,90 @@ export function apply(ctx: Context, config: Config): void {
   // starts rather than after the one already running.
   log.info(`permission mode: ${getMode()}`)
 
+  // ── Audit ────────────────────────────────────────────────────────────────
+  //
+  // The mode governs what may be mutated in the operator's Huawei Cloud
+  // account, so "who granted write access, and when" has to be answerable
+  // afterwards. Records go to the audit service, which owns the destination;
+  // this plugin only decides when something is worth recording.
+
+  /**
+   * The account name `aishell-credentials` recorded after verifying the pair
+   * against IAM.
+   *
+   * Read from the settings document rather than by asking IAM: a mode switch is
+   * synchronous, and a label is not worth a round trip inside it. Absent when
+   * that plugin is not mounted, or before its first verification — the subject
+   * then carries only the masked access key, which still identifies the account
+   * across records.
+   *
+   * Read per record rather than captured: a rotation changes the account, and a
+   * captured name would attribute a later switch to the previous one.
+   */
+  const accountName = (): string | undefined => {
+    const descriptor = ctx.get('settings')?.describe()
+      .find(entry => entry.ns === CREDENTIALS_SETTINGS_NS)
+    const value = descriptor?.value as { accessKeyIdHint?: unknown } | undefined
+    return typeof value?.accessKeyIdHint === 'string' && value.accessKeyIdHint.length > 0
+      ? value.accessKeyIdHint
+      : undefined
+  }
+
+  // `ctx.inject` rather than a `ctx.get` at mount: the audit plugin is a
+  // separate row whose position in the bundle is not this plugin's to decide,
+  // and a deployment may not mount it at all. `inject` runs the callback when
+  // the service exists, whenever that is, which keeps the trail wired without
+  // making it a requirement.
+  ctx.inject(['audit'], (auditCtx) => {
+    /**
+     * Record one mode change.
+     *
+     * The account is read here rather than passed in, so a record names the
+     * account in force at that moment: after a rotation, the previous account
+     * would be the wrong attribution.
+     */
+    const recordChange = (change: PermissionChange): void => {
+      const ak = readStoredPair(store)?.ak
+      auditCtx.audit.record({
+        action: 'permission.mode',
+        // The direction, not just "it changed": a grant and its reversal read
+        // differently, and an auditor should not have to know the mode
+        // vocabulary to tell which way a switch went.
+        outcome: change.mode === 'read_write' ? 'granted' : 'revoked',
+        ...(ak === undefined ? {} : { subject: auditSubject(ak, accountName()) }),
+        actor: change.actor,
+        detail: change.previous === undefined
+          // A mode the process started in has nothing it came from, and naming
+          // one would describe a transition that never happened.
+          ? { to: change.mode }
+          : { from: change.previous, to: change.mode },
+      })
+    }
+
+    // A process CONFIGURED for write access had it before any trail existed, so
+    // this reports that grant. `defaultMode()` and not `getMode()`: the current
+    // mode may already have been changed by a person while the trail was
+    // absent, and recording that as a startup grant would credit the
+    // configuration with a switch the user made.
+    if (defaultMode() === 'read_write') {
+      recordChange({ previous: undefined, mode: 'read_write', actor: 'startup' })
+    }
+
+    // Every later change passes through `setMode`, so installing the recorder
+    // there is what makes the trail gapless: no caller has to remember.
+    auditCtx.effect(() => installPermissionRecorder(recordChange),
+      'aishell-deploy: permission audit recorder')
+  })
+
   const routes = createPermissionRoutes({
     // Read the live module each time rather than snapshotting: `writesAllowed()`
     // is what the gate consults, so reporting anything else here would let the
     // chip claim a mode the next tool call does not honour.
     read: () => ({ mode: getMode(), default: defaultMode(), writable: writesAllowed() }),
     write: (next) => {
+      // `setMode` records the change; a re-assertion of the current mode
+      // reports the same state back to the chip without claiming the operator
+      // did something they did not.
       const previous = setMode(next)
       return { mode: getMode(), previous, changed: previous !== next }
     },

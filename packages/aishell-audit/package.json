@@ -1,7 +1,7 @@
 {
   "name": "@huaweidevtools/aishell-dsh-audit",
   "description": "Audit trail service for aishell DSH plugins — records non-conversational actions (permission grants, account changes) to the Host log",
-  "version": "0.0.36",
+  "version": "0.0.37",
   "publishConfig": {
     "access": "public"
   },

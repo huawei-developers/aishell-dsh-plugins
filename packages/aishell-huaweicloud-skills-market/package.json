@@ -1,7 +1,7 @@
 {
   "name": "@huaweidevtools/aishell-dsh-huaweicloud-skills-market",
   "description": "Browse and install Huawei Cloud's official agent skills from inside AI Shell — a Plugins-page tab over the huaweicloud/huaweicloud-skills catalogue",
-  "version": "0.0.35",
+  "version": "0.0.36",
   "publishConfig": {
     "access": "public"
   },
@@ -68,13 +68,13 @@
     "@deepseek-ai/dsh-client-ui-renderer": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
     "@deepseek-ai/dsh-client-ui-slots": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
     "@deepseek-ai/dsh-home-paths": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
-    "@types/node": "^22.10.0",
-    "tsdown": "^0.10.0",
-    "typescript": "^5.7.0",
     "@deepseek-ai/schemastery": "3.19.0",
-    "react": "^18.2.0",
+    "@types/node": "^22.10.0",
     "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.1",
+    "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "@types/react-dom": "~18.3.1"
+    "tsdown": "^0.10.0",
+    "typescript": "^5.7.0"
   }
 }

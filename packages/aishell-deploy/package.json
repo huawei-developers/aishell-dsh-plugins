@@ -1,7 +1,7 @@
 {
   "name": "@huaweidevtools/aishell-dsh-deploy",
-  "description": "Huawei Cloud infrastructure tools for DSH \u2014 Terraform, OpenAPI, resource inventory, cost estimates",
-  "version": "0.0.35",
+  "description": "Huawei Cloud infrastructure tools for DSH — Terraform, OpenAPI, resource inventory, cost estimates",
+  "version": "0.0.36",
   "publishConfig": {
     "access": "public"
   },
@@ -41,24 +41,24 @@
     "@deepseek-ai/cordis": "^4.1.0",
     "@deepseek-ai/dsh-client-connection": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
     "@deepseek-ai/dsh-llm": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
+    "@deepseek-ai/dsh-settings": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
     "@deepseek-ai/dsh-system-prompt": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
     "@deepseek-ai/dsh-tools": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
-    "@huaweidevtools/aishell-dsh-audit": "workspace:*",
-    "@deepseek-ai/dsh-settings": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3"
+    "@huaweidevtools/aishell-dsh-audit": "workspace:*"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.1.0",
     "@deepseek-ai/cordis-plugin-loader": "^1.1.0",
     "@deepseek-ai/dsh-client-connection": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
     "@deepseek-ai/dsh-llm": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
+    "@deepseek-ai/dsh-settings": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
     "@deepseek-ai/dsh-system-prompt": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
     "@deepseek-ai/dsh-tools": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
     "@deepseek-ai/schemastery": "3.19.0",
+    "@huaweidevtools/aishell-dsh-audit": "workspace:*",
     "tsdown": "^0.10.0",
     "typescript": "^5.7.0",
-    "zod": "^4.2.0",
-    "@huaweidevtools/aishell-dsh-audit": "workspace:*",
-    "@deepseek-ai/dsh-settings": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3"
+    "zod": "^4.2.0"
   },
   "dsh": {
     "bundle": {

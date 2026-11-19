@@ -12,7 +12,6 @@ coverage/
 .coverage-times.json
 packed/
 
-.render-check/
 
 # Fetched data assets. Reproduce with `pnpm run fetch-examples`; shipped in the
 # published package, not in the repository.

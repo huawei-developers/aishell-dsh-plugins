@@ -19,9 +19,6 @@
     "check:packages": "node scripts/check-packages.mjs",
     "publish": "pnpm -r publish --publish-branch main",
     "bump:version": "node scripts/bump-version.mjs",
-    "render:check": "node scripts/render-check/run.mjs",
-    "render:check:open": "node scripts/render-check/run.mjs --keep-open",
-    "render:preview": "node scripts/render-check/preview.mjs",
     "fetch-examples": "node scripts/fetch-examples.mjs",
     "build-permission-registry": "node --experimental-strip-types scripts/build-permission-registry.ts"
   },

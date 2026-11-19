@@ -25,8 +25,8 @@
  *
  * These rules are not machine-checked: rendering the glyphs needs
  * `react-dom/server`, which this repo does not depend on, and vitest here
- * collects only `.spec.ts` (not `.tsx`). The browser harness in
- * `scripts/render-check/` is what actually puts them on screen.
+ * collects only `.spec.ts` (not `.tsx`), so nothing in this repository puts them
+ * on screen.
  *
  * @module @huaweidevtools/aishell-dsh-brand/client/suggestion-icons
  */

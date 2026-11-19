@@ -16,13 +16,6 @@ A place inside AI Shell to browse DSH plugins and install them.
 
 *Provisional package: `aishell-dsh-market`.*
 
-### Huawei Cloud skills
-
-The catalogue of Huawei Cloud's official skills, browsable and installable from
-inside AI Shell.
-
-*Provisional package: `aishell-dsh-huaweicloud-skills`.*
-
 ### Huawei Cloud resource connectors
 
 Connections to Huawei Cloud resources such as RDS, DMQ, and CCE, so the agent

@@ -60,6 +60,11 @@
     - id: aishell-audit
       name: '@huaweidevtools/aishell-dsh-audit'
 
+# from ../aishell-huaweicloud-skills-market
+- insert:
+    - id: aishell-huaweicloud-skills-market
+      name: '@huaweidevtools/aishell-dsh-huaweicloud-skills-market'
+
 # overridden upstream rows (id-targeted; this layer applies after the official bundles)
 - id: agent-default-model
   config: { provider: aishell, model: trial }

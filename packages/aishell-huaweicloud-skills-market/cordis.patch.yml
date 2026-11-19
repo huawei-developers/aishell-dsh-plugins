@@ -1,0 +1,13 @@
+# aishell-huaweicloud-skills-market bundle patch: the Plugins-page tab that
+# browses and installs the official Huawei Cloud skills.
+#
+# The single row mounts both halves: the Host half serves the catalogue route
+# (`/api/aishell/huaweicloud-skills-market`) and writes chosen bundles into the
+# harness's own skills root; the client half contributes the tab.
+#
+# Nothing here registers with `ctx.skills`: an installed skill is an ordinary
+# local skill once it is on disk, discovered by the harness's filesystem
+# provider exactly as a hand-authored one is.
+- insert:
+    - id: aishell-huaweicloud-skills-market
+      name: '@huaweidevtools/aishell-dsh-huaweicloud-skills-market'

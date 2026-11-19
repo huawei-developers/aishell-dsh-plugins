@@ -1,0 +1,571 @@
+/* Huawei Cloud skills market tab.
+   Colours, radii, and type sizes come from the host's --dsw-alias-* and
+   --dsw-radius-* tokens, so the tab follows the shell's theme without a second
+   palette. Four rules shape everything below:
+
+   - Hover affordances sit under @media (hover: hover): a tap latches :hover, and
+     a card left in its pointer-only state on a touch screen reads as selected.
+   - A state change never moves another element: the card's hover lift is an
+     individual `translate`, and its resting value is identity so the lift cannot
+     be what creates the card's stacking context.
+   - The card is a size container, not a viewport breakpoint: the grid decides
+     how wide a card is, and a card in a narrow column reflows on its own.
+   - Every colour is a token reference; none is written here. */
+
+.aishell-market {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  padding-block: 4px 32px;
+}
+
+/* ── the toolbar ───────────────────────────────────────────────────────── */
+
+.aishell-market__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.aishell-market__search {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+/* Text fields take a 16px floor under a coarse pointer: iOS Safari zooms the
+   visual viewport for a focused field under 16px and leaves the page pannable. */
+@media (pointer: coarse) {
+  .aishell-market__search input {
+    font-size: 16px;
+  }
+}
+
+/* A square icon control that keeps the compact button's height, so it lines up
+   with the search field beside it. */
+.aishell-market__refresh {
+  appearance: none;
+  box-sizing: border-box;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  flex: none;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-md);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.aishell-market__refresh svg {
+  display: block;
+}
+
+.aishell-market__refresh:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.aishell-market__refresh:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
+
+/* The arrow turns only while a read runs, and not at all for someone who asked
+   the system for reduced motion. */
+.aishell-market__refresh[data-busy='true'] svg {
+  animation: aishell-market-spin 900ms linear infinite;
+}
+
+@keyframes aishell-market-spin {
+  to { rotate: 360deg; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aishell-market__refresh[data-busy='true'] svg { animation: none; }
+}
+
+/* The filter row: the install switch, then the category rail. It sits under the
+   search row because the two answer different questions — what you are looking
+   for, and what you are looking at. */
+.aishell-market__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* A segmented control: one exclusive choice, drawn as one track with a raised
+   selection. Distinct from the category chips on purpose — those multi-select
+   and these do not. */
+.aishell-market__segment {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  flex: none;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.aishell-market__segmentItem {
+  appearance: none;
+  margin: 0;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: calc(var(--dsw-radius-md) - 2px);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Fill and text only: the selection must not change the control's width. */
+.aishell-market__segmentItem[aria-pressed='true'] {
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent);
+}
+
+.aishell-market__segmentItem:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
+
+@media (hover: hover) {
+  .aishell-market__segmentItem:hover { color: var(--dsw-alias-label-primary); }
+}
+
+/* ── the category rail ──────────────────────────────────────────────────── */
+
+.aishell-market__categories {
+  display: flex;
+  /* `balance` distributes a wrapped row of filter pills across its lines
+     instead of leaving one orphan on the last. Declared after `wrap` so a browser
+     without it keeps the plain wrap above. */
+  flex-wrap: wrap;
+  flex-wrap: balance;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.aishell-market__chip {
+  appearance: none;
+  margin: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Fill and stroke only: a chip keeps its size when selected, so selecting one
+   does not shift its neighbours. */
+.aishell-market__chip[aria-pressed='true'] {
+  background: var(--dsw-alias-interactive-bg-active);
+  border-color: var(--dsw-alias-border-l3);
+  color: var(--dsw-alias-label-primary);
+}
+
+.aishell-market__chip:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 1px;
+}
+
+@media (hover: hover) {
+  .aishell-market__chip:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+/* ── counts, pager, and the three list states ────────────────────────────── */
+
+.aishell-market__count {
+  margin: 0;
+  color: var(--dsw-alias-label-caption);
+  font-size: 12px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.aishell-market__pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding-block: 12px 0;
+}
+
+.aishell-market__pagerStatus {
+  min-width: 72px;
+  text-align: center;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.aishell-market__state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding-block: 24px;
+}
+
+.aishell-market__stateTitle {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.aishell-market__stateHint {
+  margin: 0;
+  max-width: 60ch;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+/* ── the grid and its cards ─────────────────────────────────────────────── */
+
+.aishell-market__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(19rem, 100%), 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Each grid item is a flex shell so the card inside can fill the row's height:
+   a card whose description is short still puts its footer on the row's line. */
+.aishell-market__list > li {
+  display: flex;
+  min-width: 0;
+}
+
+.card {
+  container-type: inline-size;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 4px;
+  min-width: 0;
+  padding: 14px 16px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-1);
+  /* Identity transform on the resting state: the hover lift below must not be
+     the thing that creates this element's stacking context, or depth order
+     changes the moment the pointer arrives. */
+  translate: 0;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    translate 140ms ease;
+}
+
+/* The installed mark: a corner badge, above the stretched link. */
+.card__badge {
+  position: absolute;
+  inset-block-start: 10px;
+  inset-inline-end: 10px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent);
+  color: var(--dsw-alias-state-success-primary);
+  font-size: 11px;
+  line-height: 1.55;
+  font-weight: 500;
+  white-space: nowrap;
+  /* Hug the glyphs rather than the font box, so the badge's padding is the gap
+     a reader can actually see. */
+  text-box: trim-both cap alphabetic;
+}
+
+.card__badge svg {
+  display: block;
+  flex: none;
+}
+
+.card__title {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+  min-width: 0;
+  text-wrap: balance;
+  /* Leave room for the corner badge. */
+  padding-inline-end: 72px;
+}
+
+.card__link {
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  text-align: start;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+/* The stretched hit area: the whole card is clickable, the name is the link. */
+.card__link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.card__link:focus-visible {
+  outline: none;
+}
+
+/* Focus is drawn on the card, not on the text inside it. */
+.card:has(.card__link:focus-visible) {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 2px;
+}
+
+.card__text {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.card__error {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* The footer rides the card's bottom edge: a hairline spans the padding, the
+   tags sit at its left, the action at its right. Both children are aligned to
+   the same bottom edge, so their differing heights do not read as drift. */
+.card__foot {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin: auto -16px -8px;
+  margin-block-start: auto;
+  padding: 8px 16px;
+  border-block-start: 1px solid var(--dsw-alias-border-l1);
+  min-width: 0;
+  min-block-size: 44px;
+}
+
+.card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+  /* Two rows at most; anything past that is clipped rather than pushing the
+     card taller than its neighbours. The cap in `cardTags()` means this is a
+     backstop, not the rule. */
+  max-block-size: 52px;
+  overflow: hidden;
+}
+
+.card__actions {
+  display: flex;
+  gap: 4px;
+  flex: none;
+  /* Above the stretched link so a click on the button is the button's. */
+  position: relative;
+  z-index: 1;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  max-inline-size: 100%;
+  padding: 2px 8px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 999px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-box: trim-both cap alphabetic;
+}
+
+@media (hover: hover) {
+  .card:hover {
+    border-color: var(--dsw-alias-border-l3);
+    background: var(--dsw-alias-bg-module-platform);
+    /* Two shadows at different distances read as height; one reads as a smudge. */
+    translate: 0 -2px;
+    box-shadow:
+      0 1px 2px color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent),
+      0 8px 20px color-mix(in srgb, var(--dsw-alias-label-primary) 9%, transparent);
+  }
+
+  .card:hover .card__link {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card { transition: background-color 0ms, border-color 0ms, box-shadow 0ms; }
+  .card:hover { translate: 0; }
+}
+
+/* A card narrower than about fourteen characters of body text drops the action
+   under the tags, where it still fits. */
+@container (max-width: 210px) {
+  .card__foot {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .card__tags { flex-basis: 100%; }
+
+  .card__actions { margin-inline-start: auto; }
+}
+
+/* ── skeleton cards ─────────────────────────────────────────────────────── */
+
+.card--skeleton {
+  pointer-events: none;
+}
+
+.skeleton {
+  background: var(--dsw-alias-bg-skeleton);
+  border-radius: var(--dsw-radius-xs);
+  animation: aishell-market-skeleton 2s cubic-bezier(0.36, 0, 0.64, 1) infinite;
+}
+
+.skeleton--title { width: min(12rem, 60%); height: 16px; }
+.skeleton--text { width: 90%; height: 12px; }
+.skeleton--text2 { width: 70%; height: 12px; }
+.skeleton--tag { width: 52px; height: 18px; border-radius: 999px; }
+
+@keyframes aishell-market-skeleton {
+  0% { opacity: 1; }
+  40% { opacity: 0.6; }
+  80%, 100% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
+
+/* ── one skill's page ───────────────────────────────────────────────────── */
+
+.aishell-market__page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.aishell-market__pageBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aishell-market__document {
+  min-width: 0;
+  /* Long code lines and tables scroll inside the document rather than widening
+     the page column. */
+  overflow-x: auto;
+}
+
+.aishell-market__source {
+  margin: 16px 0 0;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.aishell-market__source a {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+/* ── the uninstall confirmation ─────────────────────────────────────────── */
+
+/* A modal <dialog> centres itself and paints its own backdrop; the UA's default
+   padding and border are the two things to replace. */
+.aishell-market__dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(420px, calc(100% - 32px));
+  margin: auto;
+  padding: 20px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-xl);
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--dsw-alias-label-primary) 18%, transparent);
+  color: var(--dsw-alias-label-primary);
+}
+
+.aishell-market__dialog::backdrop {
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 32%, transparent);
+}
+
+.aishell-market__dialogTitle {
+  margin: 0;
+  font-size: 15px;
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.aishell-market__dialogBody {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.aishell-market__dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}

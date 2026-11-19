@@ -18,6 +18,7 @@ patchFrom:
   - ../aishell-share
   - ../aishell-qr
   - ../aishell-audit
+  - ../aishell-huaweicloud-skills-market
 deps:
   - ../credentials-store
   - ../aishell-llm
@@ -31,6 +32,7 @@ deps:
   - ../aishell-share
   - ../aishell-qr
   - ../aishell-audit
+  - ../aishell-huaweicloud-skills-market
 override:
   # The official base pins the entry-point default to deepseek-official /
   # deepseek-flash. AI Shell's only chat route is the aishell gateway, so the

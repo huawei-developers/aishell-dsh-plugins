@@ -2,17 +2,44 @@
   "extends": "./tsconfig.base.json",
   "files": [],
   "references": [
-    { "path": "./packages/credentials-store" },
-    { "path": "./packages/aishell-llm" },
-    { "path": "./packages/aishell-credentials" },
-    { "path": "./packages/aishell-brand" },
-    { "path": "./packages/aishell-deploy" },
-    { "path": "./packages/aishell-huaweicloud-docs" },
-    { "path": "./packages/aishell-qr" },
-    { "path": "./packages/aishell-audit" },
-    { "path": "./packages/aishell-handbook" },
-    { "path": "./packages/aishell-e2b" },
-    { "path": "./packages/aishell-deeplink" },
-    { "path": "./packages/aishell-share" }
+    {
+      "path": "./packages/credentials-store"
+    },
+    {
+      "path": "./packages/aishell-llm"
+    },
+    {
+      "path": "./packages/aishell-credentials"
+    },
+    {
+      "path": "./packages/aishell-brand"
+    },
+    {
+      "path": "./packages/aishell-deploy"
+    },
+    {
+      "path": "./packages/aishell-huaweicloud-docs"
+    },
+    {
+      "path": "./packages/aishell-qr"
+    },
+    {
+      "path": "./packages/aishell-audit"
+    },
+    {
+      "path": "./packages/aishell-handbook"
+    },
+    {
+      "path": "./packages/aishell-e2b"
+    },
+    {
+      "path": "./packages/aishell-deeplink"
+    },
+    {
+      "path": "./packages/aishell-share"
+    },
+    {
+      "path": "./packages/aishell-huaweicloud-skills-market"
+    }
   ]
 }

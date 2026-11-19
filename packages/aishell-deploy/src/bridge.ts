@@ -35,6 +35,15 @@
 import { z } from 'zod'
 import type {} from '@deepseek-ai/dsh-tools'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
+
+/**
+ * The execution context the harness hands a tool's `execute`.
+ *
+ * Taken from the definition's own signature: `agent` and `signal` are part of
+ * the framework's contract, so this module reads them through the type the
+ * framework declares for them.
+ */
+type ToolCallContext = Parameters<ToolDefinition['execute']>[1]
 import type { ContentBlock as DshContentBlock } from '@deepseek-ai/dsh-llm'
 
 import type {
@@ -214,19 +223,24 @@ interface SessionDirectories {
  * @returns the handler context.
  */
 async function contextFor(
-  exec: unknown,
+  exec: ToolCallContext,
   workingDirectory: SessionDirectories | undefined,
 ): Promise<ToolContext> {
-  const call = exec as { agent?: object, signal?: AbortSignal } | undefined
-  const agent = call?.agent
-  if (workingDirectory === undefined || agent === undefined) return {}
+  const agent = exec.agent
+  // The calling agent's id IS the Session id — the harness brands an agent's
+  // identity with the conversation it belongs to. Read before the directory
+  // lookup so a call whose directory cannot be resolved still carries the
+  // Session its permission gates need.
+  const sessionId = typeof agent?.id === 'string' && agent.id.length > 0 ? agent.id : undefined
+  const withSession: Pick<ToolContext, 'sessionId'> = sessionId === undefined ? {} : { sessionId }
+  if (workingDirectory === undefined || agent === undefined) return withSession
   try {
-    return { sessionDirectory: await workingDirectory.ensure(agent, call?.signal) }
+    return { ...withSession, sessionDirectory: await workingDirectory.ensure(agent, exec.signal) }
   } catch {
     // A directory the host could not resolve is the same situation as a host
     // that offers none: the tools report it when they need it, and a tool that
-    // does not need it still runs.
-    return {}
+    // does not need it still runs. The Session is not lost with it.
+    return withSession
   }
 }
 

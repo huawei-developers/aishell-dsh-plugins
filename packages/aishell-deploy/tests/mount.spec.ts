@@ -67,7 +67,8 @@ const registeredRoutes = new Map<string, {
 }>()
 
 /** The policy contribution registered on the stubbed system prompt, if any. */
-let policyContext: { name: string, order: number, text: () => string } | undefined
+let liveSessions: string[] = []
+let policyContext: { name: string, order: number, text: (context: { agent?: { id?: unknown } }) => string } | undefined
 /** Scope names for which the tool registry reports nothing visible. */
 let restrictedScopes = new Set<string>()
 /**
@@ -138,6 +139,13 @@ function makeCtx(): { ctx: never, logger: { info: ReturnType<typeof vi.fn>, warn
         },
       },
     },
+    // Sessions live in the store when the plugin mounts. The store announces
+    // creation, so these are the ones that must be read back rather than waited
+    // for.
+    sessions: {
+      list: () => liveSessions.map(id => ({ id })),
+      get: (id: string) => (liveSessions.includes(id) ? { id } : undefined),
+    },
     on: (event: string, listener: (...args: unknown[]) => void) => {
       const existing = listeners.get(event) ?? []
       listeners.set(event, [...existing, listener])
@@ -159,7 +167,7 @@ function makeCtx(): { ctx: never, logger: { info: ReturnType<typeof vi.fn>, warn
           ? { audit: auditService }
           : {}),
         systemPrompt: {
-          context: (contribution: { name: string, order: number, text: () => string }) => {
+          context: (contribution: { name: string, order: number, text: (context: { agent?: { id?: unknown } }) => string }) => {
             policyContext = contribution
             return () => { policyContext = undefined }
           },
@@ -206,6 +214,7 @@ beforeEach(() => {
   definitions = []
   registeredRoutes.clear()
   listeners.clear()
+  liveSessions = []
   policyContext = undefined
   workflowSection = undefined
   restrictedScopes = new Set()
@@ -224,7 +233,7 @@ describe('aishell-deploy — permission audit subject', () => {
     credentialsSettings = name === undefined ? undefined : { accessKeyIdHint: name }
     auditRecords = []
     apply(makeCtx().ctx, makeConfig())
-    modeModule.setMode('read_write')
+    modeModule.setMode('s1', 'read_write')
     return auditRecords[0]!
   }
 
@@ -396,61 +405,98 @@ describe('aishell-deploy — the permission route', () => {
     expect(route?.methods).toEqual(['GET', 'POST'])
   })
 
+  it('registers the posture on its own path', () => {
+    // A caller cannot reach it by omitting a field from a conversation's
+    // request, which is what makes "setting what new Sessions start in" a
+    // decision somebody has to make deliberately.
+    apply(makeCtx().ctx, makeConfig())
+
+    const route = registeredRoutes.get('/api/aishell/permission/default')
+    expect(route).toBeDefined()
+    expect(route?.methods).toEqual(['GET', 'POST'])
+  })
+
   it('reports the mode the gate is enforcing', async () => {
+    liveSessions = ['s1']
+    apply(makeCtx().ctx, makeConfig())
+
+    const response = await registeredRoutes.get('/api/aishell/permission')?.fetch?.(
+      new Request('http://localhost/api/aishell/permission?session=s1', { method: 'GET' }),
+    )
+    expect(await response?.json()).toEqual({ ok: true, mode: 'read_only' })
+  })
+
+  it('refuses a request that names no Session', async () => {
+    // Answering one would report the posture as a conversation's own mode, and
+    // the chip would render a switch nobody made.
     apply(makeCtx().ctx, makeConfig())
 
     const response = await registeredRoutes.get('/api/aishell/permission')?.fetch?.(
       new Request('http://localhost/api/aishell/permission', { method: 'GET' }),
     )
-    expect(await response?.json()).toEqual({
-      ok: true, mode: 'read_only', default: 'read_only', writable: false,
-    })
+    expect(response?.status).toBe(400)
   })
 
   it('applies a switch to the state the gate reads', async () => {
     // The property that matters: after this POST, `writesAllowed()` — which the
     // gate calls — must agree with what the chip now shows.
+    liveSessions = ['s1', 's2']
     apply(makeCtx().ctx, makeConfig())
-    expect(modeModule.writesAllowed()).toBe(false)
+    expect(modeModule.writesAllowed('s1')).toBe(false)
 
     const response = await registeredRoutes.get('/api/aishell/permission')?.fetch?.(
       new Request('http://localhost/api/aishell/permission', {
         method: 'POST',
-        body: JSON.stringify({ mode: 'read_write' }),
+        body: JSON.stringify({ session: 's1', mode: 'read_write' }),
       }),
     )
 
     expect(await response?.json()).toMatchObject({ ok: true, mode: 'read_write', changed: true })
-    expect(modeModule.writesAllowed()).toBe(true)
+    expect(modeModule.writesAllowed('s1')).toBe(true)
+    // Another conversation is unaffected: the reason the mode is per Session.
+    expect(modeModule.writesAllowed('s2')).toBe(false)
   })
 })
 
 describe('aishell-deploy — the read-only policy context', () => {
-  it('announces read-only when the process starts read-only', () => {
+  it('announces read-only for a Session that starts read-only', () => {
+    liveSessions = ['s1']
     apply(makeCtx().ctx, makeConfig())
-    expect(policyContext?.text()).toContain('read-only')
+    expect(policyContext?.text({ agent: { id: 's1' } })).toContain('read-only')
   })
 
-  it('announces nothing when the process starts read-write', () => {
+  it('announces nothing for a Session in read-write', () => {
     // `''` drops the contribution: there is no "you may now write" line to go
     // stale.
-    modeModule.setMode('read_write')
+    liveSessions = ['s1']
+    modeModule.setMode('s1', 'read_write')
     apply(makeCtx().ctx, makeConfig())
-    expect(policyContext?.text()).toBe('')
+    expect(policyContext?.text({ agent: { id: 's1' } })).toBe('')
+  })
+
+  it('answers each Session its own posture', () => {
+    // The failure a process-wide mode made: one conversation's grant told
+    // another's model it could write, which the gate then refused.
+    liveSessions = ['s1', 's2']
+    modeModule.setMode('s1', 'read_write')
+    apply(makeCtx().ctx, makeConfig())
+    expect(policyContext?.text({ agent: { id: 's1' } })).toBe('')
+    expect(policyContext?.text({ agent: { id: 's2' } })).toContain('read-only')
   })
 
   it('follows a switch, so the prompt cannot invite what the gate refuses', async () => {
+    liveSessions = ['s1']
     apply(makeCtx().ctx, makeConfig())
-    expect(policyContext?.text()).toContain('read-only')
+    expect(policyContext?.text({ agent: { id: 's1' } })).toContain('read-only')
 
     await registeredRoutes.get('/api/aishell/permission')?.fetch?.(
       new Request('http://localhost/api/aishell/permission', {
         method: 'POST',
-        body: JSON.stringify({ mode: 'read_write' }),
+        body: JSON.stringify({ session: 's1', mode: 'read_write' }),
       }),
     )
 
-    expect(policyContext?.text()).toBe('')
+    expect(policyContext?.text({ agent: { id: 's1' } })).toBe('')
   })
 })
 describe('aishell-deploy — the workflow section', () => {
@@ -546,5 +592,44 @@ describe('aishell-deploy — the workflow section', () => {
     }
     // And never the bare spelling, which no tool answers to.
     expect(text).not.toMatch(/(?<!aishell__)terraform_apply/)
+  })
+})
+
+describe('aishell-deploy — Session lifetime', () => {
+  it('pins a Session at creation, so a later posture change leaves it alone', () => {
+    apply(makeCtx().ctx, makeConfig())
+    // A Session that existed before the deployment raised the posture.
+    listeners.get('session/created')?.forEach(listener => { listener({ id: 'existing' }) })
+
+    modeModule.setDefaultPosture('read_write')
+    listeners.get('session/created')?.forEach(listener => { listener({ id: 'fresh' }) })
+
+    expect(modeModule.getMode('existing')).toBe('read_only')
+    expect(modeModule.getMode('fresh')).toBe('read_write')
+  })
+
+  it('forgets a Session when it is disposed', () => {
+    liveSessions = ['gone']
+    apply(makeCtx().ctx, makeConfig())
+    listeners.get('session/created')?.forEach(listener => { listener({ id: 'gone' }) })
+    modeModule.setMode('gone', 'read_write')
+
+    listeners.get('session/disposed')?.forEach(listener => { listener({ id: 'gone' }) })
+
+    expect(modeModule.getMode('gone')).toBe('read_only')
+  })
+})
+
+describe('aishell-deploy — Sessions that predate the plugin', () => {
+  it('pins a Session that already existed when the plugin mounted', () => {
+    // A conversation can predate the plugin, so its creation announcement
+    // reached nobody. Reading the live Sessions back is what puts it under the
+    // same rule as every other Session.
+    liveSessions = ['pre-existing']
+    apply(makeCtx().ctx, makeConfig())
+
+    modeModule.setDefaultPosture('read_write')
+
+    expect(modeModule.getMode('pre-existing')).toBe('read_only')
   })
 })

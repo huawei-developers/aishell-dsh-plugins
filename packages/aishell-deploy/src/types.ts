@@ -76,6 +76,14 @@ export interface ToolContext {
    * directory when the one the person picked has been removed.
    */
   readonly sessionDirectory?: string
+  /**
+   * The conversation this call is being made for, when the harness supplies one.
+   *
+   * Absent for a call made outside an agent — a direct invocation. The
+   * permission gates then judge it by the posture new Sessions start in, since
+   * there is no conversation whose own answer would apply.
+   */
+  readonly sessionId?: string
 }
 
 /** The context type the tool modules name. */

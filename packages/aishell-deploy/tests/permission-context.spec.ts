@@ -82,10 +82,10 @@ describe('permissionPolicyText — what is announced', () => {
 /** A scope where the registered contribution can be read back. */
 function makeScope(order = 115): {
   scope: { systemPrompt: { context: (c: unknown) => () => void, getContextOrder: (n: string) => number } }
-  registered: Array<{ name: string, order: number, text: () => string }>
+  registered: Array<{ name: string, order: number, text: (context: { agent?: { id?: unknown } }) => string }>
   orderQueried: string[]
 } {
-  const registered: Array<{ name: string, order: number, text: () => string }> = []
+  const registered: Array<{ name: string, order: number, text: (context: { agent?: { id?: unknown } }) => string }> = []
   const orderQueried: string[] = []
   return {
     registered,
@@ -123,9 +123,25 @@ describe('registerPermissionPolicyContext — the registration', () => {
     expect(orderQueried).toEqual(['APPROVAL_POLICY'])
   })
 
-  it('reads the mode through the accessor at each evaluation', () => {
+  it('asks for the mode of the Session being assembled', () => {
     // The provider is synchronous and runs per assembly, so the accessor is how
-    // a switch reaches the prompt at all.
+    // a switch reaches the prompt at all — and the Session is what keeps one
+    // conversation's switch out of another's prompt.
+    const { scope, registered } = makeScope()
+    const ctx = { inject: (_deps: string[], fn: (s: unknown) => void) => { fn(scope) } } as unknown as Context
+    const asked: Array<string | undefined> = []
+
+    registerPermissionPolicyContext(ctx, (session) => {
+      asked.push(session)
+      return 'read_only'
+    })
+
+    const [entry] = registered as [typeof registered[number]]
+    expect(entry.text({ agent: { id: 's1' } })).toBe(READ_ONLY_POLICY)
+    expect(asked).toEqual(['s1'])
+  })
+
+  it('reads the mode through the accessor at each evaluation', () => {
     const { scope, registered } = makeScope()
     const ctx = { inject: (_deps: string[], fn: (s: unknown) => void) => { fn(scope) } } as unknown as Context
     let mode: PermissionMode | undefined = 'read_only'
@@ -133,9 +149,26 @@ describe('registerPermissionPolicyContext — the registration', () => {
     registerPermissionPolicyContext(ctx, () => mode)
 
     const [entry] = registered as [typeof registered[number]]
-    expect(entry.text()).toBe(READ_ONLY_POLICY)
+    expect(entry.text({ agent: { id: 's1' } })).toBe(READ_ONLY_POLICY)
     mode = 'read_write'
-    expect(entry.text()).toBe('')
+    expect(entry.text({ agent: { id: 's1' } })).toBe('')
+  })
+
+  it('asks about no Session when the assembly carries none', () => {
+    // A diagnostic assembly has no agent. Reading the posture instead of
+    // inventing an identity is what keeps the answer honest.
+    const { scope, registered } = makeScope()
+    const ctx = { inject: (_deps: string[], fn: (s: unknown) => void) => { fn(scope) } } as unknown as Context
+    const asked: Array<string | undefined> = []
+
+    registerPermissionPolicyContext(ctx, (session) => {
+      asked.push(session)
+      return 'read_only'
+    })
+
+    const [entry] = registered as [typeof registered[number]]
+    entry.text({})
+    expect(asked).toEqual([undefined])
   })
 
   it('does nothing, and does not throw, without the system prompt service', () => {

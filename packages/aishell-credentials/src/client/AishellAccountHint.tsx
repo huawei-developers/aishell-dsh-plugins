@@ -74,7 +74,7 @@ export function AishellAccountHint(props: AishellAccountHintProps): ReactNode {
   // Shared with the hero chip so the two surfaces cannot drift apart. The
   // read-write risk gate's state comes back with the mode: both chips drive the
   // same host-side switch, so the confirmation is owned once, here.
-  const { mode, busy, toggle, confirmation, cancelConfirmation, confirmToggle } = usePermissionMode()
+  const { mode, busy, toggle, confirmation, cancelConfirmation, confirmToggle } = usePermissionMode(props.sessionId)
 
   // Promote the host dock container to a flex row: chip right, ContextMeter
   // left. The host owns the container's class-based styles; inline `display`

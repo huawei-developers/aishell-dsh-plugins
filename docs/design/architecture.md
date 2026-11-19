@@ -460,8 +460,14 @@ networks, which is how a reader asks the question.
 
 The mode is out-of-band state: a person sets it, no tool reads it, and no tool
 argument changes it. It is not a setting the agent can reason about, and it is
-not persisted — a restart returns to the safe default, so a session that needs
-write access must be granted it again.
+not persisted — a restart returns every Session to read-only, so a conversation
+that needs write access must be granted it again.
+
+**It belongs to one Session.** Two conversations open in one window are two
+decisions, and a grant in one must not widen what an agent is doing in the
+other. Every Session is pinned at creation to the posture a deployment asked for
+(`api/aishell/permission/default`), read-only by default; that posture decides
+what the next Session starts in and leaves existing ones as they are.
 
 Enforcement is at **two independent points**, because the capability layer
 reaches the cloud by two paths that share no entry:

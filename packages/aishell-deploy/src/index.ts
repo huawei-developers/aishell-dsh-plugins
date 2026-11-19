@@ -22,10 +22,10 @@
  *
  * ## The permission switch
  *
- * The mode is process state here. The Host route the composer chip calls reads
- * and writes it directly, so a switch takes effect before the next tool call
- * starts. The gate itself is enforced in `permission/gate.ts` — a refusal
- * cannot be talked around.
+ * One mode per Session, held in this process. The Host route the composer chip
+ * calls reads and writes it directly, so a switch takes effect before the next
+ * tool call starts. The gate itself is enforced in `permission/gate.ts` — a
+ * refusal cannot be talked around.
  *
  * ## What this plugin does not own
  *
@@ -38,6 +38,8 @@
  */
 
 import type { Context, Volatile } from '@deepseek-ai/cordis'
+// Type-only: pulls the ctx.sessions merge and its branded id type.
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import z from '@deepseek-ai/schemastery'
 // Type-only: pulls the ctx.tools registry merge.
 import type {} from '@deepseek-ai/dsh-tools'
@@ -52,14 +54,14 @@ import { registerAllTools } from './tools/index.ts'
 import { configureCredentials, forgetAccount } from './credentials.ts'
 import { clearCredentials, readStoredPair } from '@huaweidevtools/aishell-dsh-credentials-store/accounts'
 import {
-  defaultMode, getMode, installPermissionRecorder, setMode, writesAllowed,
-  type PermissionChange,
+  defaultPosture, forgetSession, getMode, installPermissionRecorder, pinSession, setDefaultPosture,
+  setMode, type PermissionChange,
 } from './permission/mode.ts'
 import type {} from '@huaweidevtools/aishell-dsh-audit'
 // Type-only: pulls the ctx.settings merge, so the account name another plugin
 // recorded can be read from the shared settings document.
 import type {} from '@deepseek-ai/dsh-settings'
-import { createPermissionRoutes, PERMISSION_PATH } from './permission-route.ts'
+import { createPermissionRoutes, PERMISSION_DEFAULT_PATH, PERMISSION_PATH } from './permission-route.ts'
 import { registerPermissionPolicyContext } from './permission-context.ts'
 import { registerDeployWorkflow } from './prompt.ts'
 
@@ -171,8 +173,11 @@ export const name = 'aishell-deploy'
  * `connection` is required because the permission route registers on the host's
  * authenticated fetch registry, and a plugin that silently lost its permission
  * switch would leave every mutation at the default.
+ * `sessions` is required because the permission mode is filed per Session: a
+ * conversation is pinned to the posture when it is created, and the store is
+ * what makes that possible for Sessions that exist before this plugin mounts.
  */
-export const inject = ['tools', 'connection']
+export const inject = ['tools', 'connection', 'sessions']
 
 export function apply(ctx: Context, config: Config): void {
   // `ctx.logger(name)` is a factory, not a logger: it returns a scoped one and
@@ -237,10 +242,32 @@ export function apply(ctx: Context, config: Config): void {
 
   // ── Permission mode ──────────────────────────────────────────────────────
   //
-  // The mode lives in this process. The route reads and writes the module
-  // directly — no round trip, so a switch takes effect before the next call
-  // starts rather than after the one already running.
-  log.info(`permission mode: ${getMode()}`)
+  // One mode per Session, held in this process. The route reads and writes the
+  // module directly — no round trip, so a switch takes effect before the next
+  // call starts rather than after the one already running.
+  log.info(`permission posture for new sessions: ${defaultPosture()}`)
+
+  // A Session's mode is keyed by an identity that will not be seen again once
+  // it is disposed, so forgetting it here is what keeps a long-running process
+  // from accumulating one entry per conversation it ever opened.
+  ctx.effect(() => ctx.on('session/disposed', (session) => {
+    forgetSession(session.id)
+  }), 'aishell-deploy: forget disposed session modes')
+
+  // Created Sessions are pinned to the posture in force at that moment, which
+  // is what keeps a later posture change from reaching a conversation that is
+  // already on screen. `session/created` also fires for a restored session, and
+  // `pinSession` leaves an existing entry alone, so a resumed conversation keeps
+  // the answer it already had.
+  ctx.effect(() => ctx.on('session/created', (session) => {
+    pinSession(session.id)
+  }), 'aishell-deploy: pin created session modes')
+
+  // Sessions that exist at mount are pinned to the posture in force now: their
+  // creation predates this plugin, so the posture they began under is not a fact
+  // the plugin can still observe. From here on they carry their own entry, which
+  // is the same rule every later Session gets.
+  for (const session of ctx.sessions.list()) pinSession(session.id)
 
   // ── Audit ────────────────────────────────────────────────────────────────
   //
@@ -285,31 +312,44 @@ export function apply(ctx: Context, config: Config): void {
      * would be the wrong attribution.
      */
     const recordChange = (change: PermissionChange): void => {
-      const ak = readStoredPair(store)?.ak
-      auditCtx.audit.record({
-        action: 'permission.mode',
-        // The direction, not just "it changed": a grant and its reversal read
-        // differently, and an auditor should not have to know the mode
-        // vocabulary to tell which way a switch went.
-        outcome: change.mode === 'read_write' ? 'granted' : 'revoked',
-        ...(ak === undefined ? {} : { subject: auditSubject(ak, accountName()) }),
-        actor: change.actor,
-        detail: change.previous === undefined
-          // A mode the process started in has nothing it came from, and naming
-          // one would describe a transition that never happened.
-          ? { to: change.mode }
-          : { from: change.previous, to: change.mode },
-      })
+      // The switch is the decision a person made; the trail describes it and
+      // does not authorise it. Nothing here can fail the switch, so a record
+      // that could not be written is a gap in the trail — never a permission
+      // change that silently did not take effect.
+      try {
+        const ak = readStoredPair(store)?.ak
+        auditCtx.audit.record({
+          action: 'permission.mode',
+          // The direction, not just "it changed": a grant and its reversal read
+          // differently, and an auditor should not have to know the mode
+          // vocabulary to tell which way a switch went.
+          outcome: change.mode === 'read_write' ? 'granted' : 'revoked',
+          ...(ak === undefined ? {} : { subject: auditSubject(ak, accountName()) }),
+          actor: change.actor,
+          detail: {
+            ...change.previous === undefined
+              // A mode nothing preceded has nothing it came from, and naming one
+              // would describe a transition that never happened.
+              ? { to: change.mode }
+              : { from: change.previous, to: change.mode },
+            // Which conversation the switch applies to. A posture change names
+            // none, and the record then describes what new Sessions start in
+            // rather than a conversation somebody was looking at.
+            ...change.session === undefined ? {} : { session: change.session },
+          },
+        })
+      } catch {
+        // Silent, like an uninstalled recorder: this plugin owns the trail but
+        // not its sink, and a failure here has already been reported by whoever
+        // owns the file. A message on stderr would reach a terminal rather than
+        // the trail it belongs in.
+      }
     }
 
-    // A process CONFIGURED for write access had it before any trail existed, so
-    // this reports that grant. `defaultMode()` and not `getMode()`: the current
-    // mode may already have been changed by a person while the trail was
-    // absent, and recording that as a startup grant would credit the
-    // configuration with a switch the user made.
-    if (defaultMode() === 'read_write') {
-      recordChange({ previous: undefined, mode: 'read_write', actor: 'startup' })
-    }
+    // The posture new Sessions start in is part of the trail, recorded before
+    // any switch: a log whose first entry is a person weakening that posture
+    // cannot be told from one where nobody was watching before it.
+    recordChange({ session: undefined, previous: undefined, mode: defaultPosture(), actor: 'startup' })
 
     // Every later change passes through `setMode`, so installing the recorder
     // there is what makes the trail gapless: no caller has to remember.
@@ -318,28 +358,44 @@ export function apply(ctx: Context, config: Config): void {
   })
 
   const routes = createPermissionRoutes({
-    // Read the live module each time rather than snapshotting: `writesAllowed()`
-    // is what the gate consults, so reporting anything else here would let the
+    // A Session the store does not hold cannot own a mode: the entry would
+    // outlive the conversation it describes, and a future Session reusing that
+    // id would read a grant nobody gave it.
+    known: (session) => ctx.sessions.get(session as SessionId) !== undefined,
+    // Read the live module each time rather than snapshotting: `getMode()` is
+    // what the gate consults, so reporting anything else here would let the
     // chip claim a mode the next tool call does not honour.
-    read: () => ({ mode: getMode(), default: defaultMode(), writable: writesAllowed() }),
-    write: (next) => {
+    read: (session) => ({ mode: getMode(session) }),
+    write: (session, next) => {
       // `setMode` records the change; a re-assertion of the current mode
       // reports the same state back to the chip without claiming the operator
       // did something they did not.
-      const previous = setMode(next)
-      return { mode: getMode(), previous, changed: previous !== next }
+      const previous = setMode(session, next)
+      return { mode: getMode(session), previous, changed: previous !== next }
     },
+    readDefault: () => defaultPosture(),
+    writeDefault: (next) => setDefaultPosture(next),
   })
   ctx.effect(() => ctx.connection.fetch.register({
     path: PERMISSION_PATH,
     methods: ['GET', 'POST'],
     requestBody: 'buffered',
     fetch: (request: Request): Promise<Response> => (
-      request.method === 'GET' ? routes.get() : routes.set(request)
+      request.method === 'GET' ? routes.get(request) : routes.set(request)
     ),
   }), 'aishell-deploy: permission route')
+  // The posture's own path: setting what new Sessions start in takes a route a
+  // caller cannot reach by omitting a field from a conversation's request.
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: PERMISSION_DEFAULT_PATH,
+    methods: ['GET', 'POST'],
+    requestBody: 'buffered',
+    fetch: (request: Request): Promise<Response> => (
+      request.method === 'GET' ? routes.getDefault() : routes.setDefault(request)
+    ),
+  }), 'aishell-deploy: permission posture route')
 
-  registerPermissionPolicyContext(ctx, () => getMode())
+  registerPermissionPolicyContext(ctx, (session) => getMode(session))
   registerDeployWorkflow(ctx)
 
   // ── Credential changes ───────────────────────────────────────────────────

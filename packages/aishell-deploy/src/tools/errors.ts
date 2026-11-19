@@ -1,6 +1,7 @@
 import type { CallToolResult, ToolContext } from "../types.js";
 
 import { denyTool } from "../permission/gate.js";
+import { runForSession, runWithoutSession } from "../permission/call-context.js";
 import { anchorPath } from "../paths.ts";
 
 /**
@@ -71,6 +72,10 @@ export function fail(message: string): CallToolResult {
  * not reach any part of its implementation, including argument validation that
  * might touch the filesystem. A tool declared in `CLOUD_MUTATING_TOOLS` is
  * refused here in read-only mode and never starts.
+ *
+ * The handler then runs inside the Session's call context, so the signed-HTTP
+ * funnel — several layers down, with no Session parameter to pass — refuses
+ * against the same Session this gate just read.
  */
 export function guard<TArgs extends Record<string, unknown> | undefined>(
   fn: (args: TArgs, ctx: ToolCtx) => Promise<ToolResult>,
@@ -78,7 +83,7 @@ export function guard<TArgs extends Record<string, unknown> | undefined>(
 ): (args: TArgs, ctx: ToolCtx) => Promise<ToolResult> {
   return async (args, ctx) => {
     if (toolName !== undefined) {
-      const refusal = denyTool(toolName);
+      const refusal = denyTool(toolName, ctx.sessionId);
       if (refusal !== undefined) return fail(refusal);
     }
     try {
@@ -86,7 +91,11 @@ export function guard<TArgs extends Record<string, unknown> | undefined>(
       // site. A handler that forgot would silently fall back to
       // `process.cwd()` — the disagreement `paths.ts` exists to prevent — and
       // it is the same answer for every handler, so one place cannot forget.
-      return await fn(withAnchoredPaths(args, ctx), ctx);
+      const body = () => fn(withAnchoredPaths(args, ctx), ctx);
+      // A call the harness gave no Session runs with none deliberately: it must
+      // not inherit one from whatever call is already in scope, which would
+      // credit it to a conversation it is not part of.
+      return await (ctx.sessionId === undefined ? runWithoutSession(body) : runForSession(ctx.sessionId, body));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return fail(msg);

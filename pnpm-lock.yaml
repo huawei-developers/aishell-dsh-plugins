@@ -263,6 +263,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: 0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3
         version: 0.2.2-rc.3(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-error@0.2.2-rc.3(@deepseek-ai/cordis@4.1.0))
+      '@deepseek-ai/dsh-session':
+        specifier: 0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3
+        version: 0.2.2-rc.3(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-error@0.2.2-rc.3(@deepseek-ai/cordis@4.1.0))(@deepseek-ai/dsh-scope@0.2.2-rc.3(@deepseek-ai/cordis@4.1.0))
       '@deepseek-ai/dsh-settings':
         specifier: 0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3
         version: 0.2.2-rc.3(d8422040b9706114b984e3e3cf213016)

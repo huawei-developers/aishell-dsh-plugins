@@ -44,9 +44,11 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-// Type-only: pulls the ctx.systemPrompt merge and the context-order names.
-import type {} from '@deepseek-ai/dsh-system-prompt'
+// Type-only: pulls the ctx.systemPrompt merge, the context-order names and the
+// `AssembleContext` the text provider is called with.
+import type { AssembleContext } from '@deepseek-ai/dsh-system-prompt'
 import type { PermissionMode } from './permission.ts'
+import type { SessionKey } from './permission/mode.ts'
 
 /** Name this contribution registers under; unique across the assembled prompt. */
 export const PERMISSION_CONTEXT_NAME = 'aishell:permission-policy'
@@ -93,16 +95,18 @@ export function permissionPolicyText(mode: PermissionMode | undefined): string {
  *
  * Deferred behind `ctx.inject` rather than declared in this plugin's own
  * `inject`: the policy is an enhancement, and a deployment without the system
- * prompt should not lose the tools over it. `current` is a function because the
- * context provider is synchronous and evaluated per assembly, so the mode is
- * read from the module state at that moment rather than captured once.
+ * prompt should not lose the tools over it.
+ *
+ * `current` is called with the assembling agent's id, which is the Session the
+ * prompt is being built for — so a conversation in read-write is not told it is
+ * read-only because a neighbouring one is.
  *
  * @param ctx - host context.
- * @param current - the mode last read or applied, or `undefined` if not yet read.
+ * @param current - the mode of the Session the assembly is for.
  */
 export function registerPermissionPolicyContext(
   ctx: Context,
-  current: () => PermissionMode | undefined,
+  current: (session: SessionKey | undefined) => PermissionMode | undefined,
 ): void {
   ctx.inject(['systemPrompt'], (scope) => {
     scope.systemPrompt.context({
@@ -111,7 +115,24 @@ export function registerPermissionPolicyContext(
       // model works under. Reusing it keeps this beside its kin in the snapshot
       // instead of at the end, where it would read as an afterthought.
       order: scope.systemPrompt.getContextOrder('APPROVAL_POLICY'),
-      text: () => permissionPolicyText(current()),
+      text: (context) => permissionPolicyText(current(agentSession(context))),
     })
   })
+}
+
+/**
+ * The Session one assembly is for.
+ *
+ * Every real assembly carries its agent — the harness sets agent and scope
+ * together, so an agent-scoped contribution cannot be silently omitted (see
+ * `assembleContextFor` in dsh-agent). A diagnostic assembly carries none, and
+ * then the policy is asked for with no Session rather than guessing one.
+ *
+ * The parameter is the framework's own `AssembleContext`, whose `agent` arrives
+ * through a type merge owned by dsh-agent: reading it through the declared type
+ * is what keeps this function and that contract in step.
+ */
+function agentSession(context: AssembleContext): SessionKey | undefined {
+  const id = context.agent?.id
+  return typeof id === 'string' && id.length > 0 ? id : undefined
 }

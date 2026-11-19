@@ -22,6 +22,7 @@
 import { spawn } from 'node:child_process'
 
 import { writesAllowed } from './permission/mode.ts'
+import { currentSession } from './permission/call-context.ts'
 import { resolveTerraformEnv } from './gates/terraform_env.ts'
 import { loadAccount } from './credentials.ts'
 import { backfillAccount } from './deployment-state.ts'
@@ -48,7 +49,10 @@ import { backfillAccount } from './deployment-state.ts'
  * @returns a refusal message, or `undefined` to proceed.
  */
 function denyTerraformMutation(args: readonly string[]): string | undefined {
-  if (writesAllowed()) return undefined;
+  // The Session comes from the call context for the same reason `denyHttp`
+  // reads it there: every terraform run is made inside a tool execution, and a
+  // Session threaded through the callers would be lost by whichever one forgot.
+  if (writesAllowed(currentSession())) return undefined;
   const subcommand = args[0];
   if (subcommand !== "apply" && subcommand !== "destroy") return undefined;
   if (args.includes("-refresh-only")) return undefined;

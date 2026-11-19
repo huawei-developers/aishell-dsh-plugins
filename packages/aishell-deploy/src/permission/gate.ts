@@ -50,7 +50,8 @@
  * @module permission/gate
  */
 
-import { writesAllowed, getMode } from "./mode.js";
+import { writesAllowed, getMode, type SessionKey } from "./mode.js";
+import { currentSession } from "./call-context.js";
 import { isReadOnlyPermitted } from "./registry.js";
 
 /**
@@ -98,13 +99,15 @@ function logDenial(detail: string): void {
  * Check a tool call against read-only mode.
  *
  * @param toolName - the tool about to run.
+ * @param session - the Session it runs for; the executor has it, so it is passed
+ *   rather than read from the call context.
  * @returns a message to return as a failed tool result, or `undefined` to proceed.
  */
-export function denyTool(toolName: string): string | undefined {
-  if (writesAllowed()) return undefined;
+export function denyTool(toolName: string, session: SessionKey | undefined): string | undefined {
+  if (writesAllowed(session)) return undefined;
   if (!CLOUD_MUTATING_TOOLS.has(toolName)) return undefined;
 
-  logDenial(`refused tool ${toolName} (mode=${getMode()})`);
+  logDenial(`refused tool ${toolName} (session=${session ?? "none"}, mode=${getMode(session)})`);
   return (
     `Refused: ${toolName} changes HuaweiCloud resources, and this session is in ` +
     `read-only mode.\n\n` +
@@ -120,19 +123,25 @@ export function denyTool(toolName: string): string | undefined {
 /**
  * Check a signed HTTP request against read-only mode.
  *
+ * The Session comes from the call context: every signed request is made inside a
+ * tool execution, and the context carries that tool's Session down to this
+ * funnel. See `./call-context.ts` for why it travels with the call rather than
+ * as an argument.
+ *
  * @param method - HTTP method.
  * @param url - the full request URL.
  * @returns a message describing the refusal, or `undefined` to proceed.
  */
 export function denyHttp(method: string, url: URL): string | undefined {
-  if (writesAllowed()) return undefined;
+  const session = currentSession();
+  if (writesAllowed(session)) return undefined;
 
   const decision = isReadOnlyPermitted(method, url);
   if (decision.allowed) return undefined;
 
   logDenial(
     `refused ${method.toUpperCase()} ${url.hostname}${url.pathname} ` +
-      `(mode=${getMode()}, reason=${decision.reason})`,
+      `(session=${session ?? "none"}, mode=${getMode(session)}, reason=${decision.reason})`,
   );
 
   switch (decision.reason) {

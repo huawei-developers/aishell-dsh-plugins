@@ -72,7 +72,7 @@ export function AishellHeroChip(props: AishellHeroChipProps): ReactNode {
   // whole dock band — the crash the first end-to-end run caught.
   const blank = props.useSession(session => session.blank)
   const status = props.useCredentials(snapshot => snapshot)
-  const { mode, busy, toggle, confirmation, cancelConfirmation, confirmToggle } = usePermissionMode()
+  const { mode, busy, toggle, confirmation, cancelConfirmation, confirmToggle } = usePermissionMode(props.sessionId)
   const t = props.t
   // Bound in apply: opens the credential form in this conversation.
   const openCredentialForm = props.openCredentialForm

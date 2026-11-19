@@ -117,7 +117,7 @@ Huawei Cloud work runs under one of two modes.
 - **Read-write** lets the agent create, change and delete Huawei Cloud resources.
 - **Read-only** restricts it to queries. The tools refuse mutations rather than merely discouraging them — a refusal names the operation and what remains available.
 
-This is one switch for the whole running process, not a per-conversation setting, and the agent cannot change it. A flip takes effect immediately.
+This is the conversation's own setting: each one carries its own mode, so a flip here leaves other conversations as they are. Only a person at the console can flip it — the agent cannot change it, and no tool or argument can. A flip takes effect immediately.
 
 An agent working under read-only is told so as a runtime context. When a user asks for something that was refused by the permission mode, the answer is that they flip the chip; never offer to work around the restriction, and never suggest reaching the same resource by another route.
 

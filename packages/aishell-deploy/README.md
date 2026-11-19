@@ -30,8 +30,8 @@ from calling someone else's tool.
 ```
 apply()
   → opens one credentials store (the aishell-dsh-plugins keyring this whole set shares)
-  → registers the 18 tools on ctx.tools
-  → registers one Host route for the permission switch
+  → registers its tools on ctx.tools
+  → registers the Host routes for the permission switch and its posture
 ```
 
 A tool call runs in this process. There is no child process, no transport, and
@@ -51,9 +51,15 @@ to reload and nothing to restart.
 
 ## Read-only mode
 
-The switch is process state, read and written directly by
+The switch belongs to one Session, read and written directly by
 `api/aishell/permission`. A switch takes effect before the next tool call
-starts, not after the one already running.
+starts, not after the one already running. Two conversations open in one window
+are two decisions: granting write access in one does not widen the other.
+
+Every Session starts in the posture — read-only unless a deployment set
+`POST api/aishell/permission/default`. Each Session is pinned to the posture in
+force when it was created, so that setting decides what the next conversation
+starts in and leaves existing ones as they are.
 
 It is enforced in two places, because the tools reach the cloud two ways:
 
@@ -61,13 +67,23 @@ It is enforced in two places, because the tools reach the cloud two ways:
   `openapi_request`'s arbitrary method and URL are covered without each tool
   having to remember to ask. `GET` and `HEAD` are queries; anything else is
   looked up in a table of known read operations, and an unknown one is denied.
+  The funnel learns which Session it is gating from the call that is awaiting
+  it (`src/permission/call-context.ts`), so no helper between a tool and the
+  client has to pass one along.
 - **The tool registry.** `terraform_apply` and `terraform_destroy` never touch
   the HTTP client, so they are refused by name.
 
 The mode is out-of-band: it appears in no tool description, no tool result, and
-nothing in the model's context can change it. While read-only, the model gets a
-prompt context explaining the posture, so it works as a reviewer — producing the
-plan and the exact commands — rather than stopping early.
+nothing in the model's context can change it. While a Session is read-only, its
+model gets a prompt context explaining the posture, so it works as a reviewer —
+producing the plan and the exact commands — rather than stopping early.
+
+| Route | Body | Answers |
+|---|---|---|
+| `GET api/aishell/permission?session=<id>` | — | that Session's mode |
+| `POST api/aishell/permission` | `{ session, mode }` | the applied change |
+| `GET api/aishell/permission/default` | — | the posture new Sessions start in |
+| `POST api/aishell/permission/default` | `{ mode }` | the posture it replaced |
 
 ## Config
 
@@ -141,7 +157,8 @@ src/
   credentials.ts         store read + account identity
   permission.ts          the wire vocabulary the browser sends
   permission/
-    mode.ts              the switch
+    mode.ts              the switch, one mode per Session
+    call-context.ts      the Session a call belongs to, for the funnel
     gate.ts              enforcement
     registry.ts          the query table
   permission-route.ts    the Host route the chip calls
@@ -160,7 +177,7 @@ src/
   rating-map.ts          terraform type → BSS service + spec/capacity attributes
   bss.ts                 the rating inquiry, including its usage-unit self-correction
   tools/pricing.ts       plan → quote → cost.json
-  tools/                 the 18 tools
+  tools/                 one module per registered tool
   existing.ts            cloud resources the design reuses
   gates/                 pre-run safety gates (design, cost, credential, env)
   schemas/               the cost schema

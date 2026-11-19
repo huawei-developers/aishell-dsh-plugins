@@ -28,9 +28,27 @@
  * observable at the moment it blocks you, and one-way unchangeable — which is
  * the property that matters.
  *
- * The mode is deliberately not persisted. A restart returns to the default,
- * so a session that needs write access must be granted it again — the safe
- * direction to fail.
+ * ## One mode per Session
+ *
+ * The mode belongs to a Session, not to the process: two conversations open in
+ * one window are two decisions, and granting write access to review something
+ * here must not widen what an agent is doing there. A Session's mode is the one
+ * a person set for it, or — until there is one — the posture this process was
+ * asked to give new Sessions.
+ *
+ * The posture decides what a Session begins with, never what it is later set
+ * to. A conversation that is already on screen keeps the answer it started
+ * with, so a deployment can raise the posture for work it is about to start
+ * without widening one a person is already reading.
+ *
+ * ## What a restart guarantees
+ *
+ * Neither a Session's mode nor the posture is persisted, so a restart returns
+ * both to read-only. A conversation that needs write access is granted it again,
+ * which is the safe direction to fail. A deployment that wants new Sessions to
+ * start in write access states that after start-up, over
+ * `POST api/aishell/permission/default` — the posture is a running decision, not
+ * a stored one, so nothing survives that would disagree with it.
  *
  * @module permission/mode
  */
@@ -38,21 +56,32 @@
 /** Whether mutations are permitted. */
 export type PermissionMode = "read_only" | "read_write";
 
+/** One conversation. The key every mode in this module is filed under. */
+export type SessionKey = string;
+
 /** Who set the mode. */
 export type PermissionActor = "user" | "startup";
 
-/** One recorded mode change. */
+/** One recorded mode change, and the Session it applies to. */
 export interface PermissionChange {
   /**
-   * The mode before the change, or `undefined` when the process started in
-   * this one.
+   * The Session whose mode changed, or `undefined` for the posture new Sessions
+   * start in.
    *
-   * A startup mode has no predecessor: it was not reached from another mode,
-   * and naming one would record a transition that never happened.
+   * A posture change is not a change to any conversation on screen, so it names
+   * no Session — the record's `detail` carries the posture it set instead.
+   */
+  readonly session: SessionKey | undefined;
+  /**
+   * The mode before the change, or `undefined` when there was none to be in.
+   *
+   * A Session with no mode of its own was in the posture, and a posture that
+   * nothing has changed yet has no predecessor either: naming one would record
+   * a transition that never happened.
    */
   readonly previous: PermissionMode | undefined;
   readonly mode: PermissionMode;
-  /** The person at the console, or the configuration the process started with. */
+  /** The person at the console, or the posture the process started with. */
   readonly actor: PermissionActor;
 }
 
@@ -88,66 +117,39 @@ export function installPermissionRecorder(
 }
 
 /**
- * Environment variable holding the startup default.
+ * The posture every Session starts in.
  *
- * Read once at module load and never re-read, so the mode cannot be changed
- * by anything the agent can influence at runtime. It is intentionally absent
- * from every tool description and from the prompt: it is an operator knob,
- * not something the model is meant to reason about.
+ * Read-only unless the deployment asked for otherwise before any conversation
+ * opened. A Session is pinned to this value when it is created, so a later
+ * change reaches only Sessions that have not started yet.
  */
-const DEFAULT_MODE_ENV = "HW_DEFAULT_PERMISSION";
+const STARTUP_POSTURE: PermissionMode = "read_only";
 
-/** The mode when nothing overrides it. */
-const FALLBACK_MODE: PermissionMode = "read_only";
+/** The posture new Sessions are pinned to. Not retroactive — see the module header. */
+let posture: PermissionMode = STARTUP_POSTURE;
 
-/**
- * Parse a mode string.
- *
- * Accepts the wire spellings plus a few the operator is likely to type in an
- * environment variable. Anything unrecognised yields `undefined` rather than
- * throwing, so a typo degrades to the default instead of failing startup.
- *
- * @param value - candidate string.
- * @returns the mode, or `undefined` when unrecognised.
- */
-export function parseMode(value: string | undefined): PermissionMode | undefined {
-  if (value === undefined) return undefined;
-  switch (value.trim().toLowerCase()) {
-    case "read_only":
-    case "read-only":
-    case "readonly":
-    case "ro":
-      return "read_only";
-    case "read_write":
-    case "read-write":
-    case "readwrite":
-    case "rw":
-      return "read_write";
-    default:
-      return undefined;
-  }
+/** Modes by Session. Every created Session has an entry; `posture` covers the rest. */
+const modes = new Map<SessionKey, PermissionMode>();
+
+/** The mode one Session may act under. */
+export function getMode(session: SessionKey | undefined): PermissionMode {
+  if (session === undefined) return posture;
+  return modes.get(session) ?? posture;
 }
 
 /**
- * The mode this process started in.
+ * The posture new Sessions start in.
  *
- * Resolved once, at load. The environment variable is an operator's input to a
- * running process, not a live setting: re-reading it would let a runtime change
- * of the variable move the "startup default" that `resetMode` restores and that
- * `/permission/get_mode` reports, which is a fact about the past.
+ * Read through a function rather than exported as a value: the route and the
+ * client both report it, and a snapshot taken at import time would go stale the
+ * first time a deployment sets it.
  */
-const STARTUP_MODE: PermissionMode = parseMode(process.env[DEFAULT_MODE_ENV]) ?? FALLBACK_MODE;
-
-/** Current mode. Module-level state — one server instance per connection. */
-let current: PermissionMode = STARTUP_MODE;
-
-/** The mode in effect. */
-export function getMode(): PermissionMode {
-  return current;
+export function defaultPosture(): PermissionMode {
+  return posture;
 }
 
 /**
- * Set the mode.
+ * Set one Session's mode.
  *
  * ## Why the notification lives here
  *
@@ -160,38 +162,92 @@ export function getMode(): PermissionMode {
  * notified: the chip re-reads the state after every call, and recording those
  * would fill the trail with actions nobody took.
  *
+ * A mode is stored under its Session for as long as that Session lives, whatever
+ * its value. Only a Session that has never been given one follows the posture;
+ * once a conversation has an answer of its own, that answer is the one it keeps,
+ * so a later posture change cannot revise a decision already made about it.
+ *
+ * @param session - the Session the mode applies to.
  * @param mode - the mode to apply.
  * @param actor - who is setting it; the route is the only production caller, so
  *   the default is the person at the console.
- * @returns the previous mode, for a change log.
+ * @returns the mode the Session was in, for a change log.
  */
 export function setMode(
+  session: SessionKey,
   mode: PermissionMode,
   actor: PermissionActor = "user",
 ): PermissionMode {
-  const previous = current;
-  current = mode;
-  if (previous !== mode) recordChange?.({ previous, mode, actor });
+  const previous = getMode(session);
+  modes.set(session, mode);
+  if (previous !== mode) recordChange?.({ session, previous, mode, actor });
   return previous;
 }
 
-/** Whether mutations are currently permitted. */
-export function writesAllowed(): boolean {
-  return current === "read_write";
+/**
+ * Whether one Session may mutate the cloud.
+ *
+ * `undefined` is "no Session" — a call outside a conversation, which answers
+ * with the posture. Every production tool call carries a Session, so that arm
+ * describes a call this plugin does not place in any conversation; it is not a
+ * separate policy, and a deployment that widened the posture widened it too.
+ */
+export function writesAllowed(session: SessionKey | undefined): boolean {
+  return getMode(session) === "read_write";
 }
 
 /**
- * Reset to the startup default, without recording.
+ * Give one Session its own mode, decided by the posture in force at creation.
+ *
+ * Every Session carries an entry from the moment it exists, which is what makes
+ * a posture change reach only Sessions that have not started. A Session pinned
+ * here keeps the answer it was created with, so a conversation on screen is
+ * never widened from underneath the person reading it.
+ *
+ * @param session - the Session being created.
+ */
+export function pinSession(session: SessionKey): void {
+  if (!modes.has(session)) modes.set(session, posture);
+}
+
+/**
+ * Set the posture new Sessions start in.
+ *
+ * Every Session already has an entry of its own, so this decides what Sessions
+ * created from now on begin with and leaves existing conversations as they are.
+ *
+ * @param mode - the posture to apply.
+ * @returns the posture it replaced.
+ */
+export function setDefaultPosture(mode: PermissionMode): PermissionMode {
+  const previous = posture;
+  posture = mode;
+  // Recorded as the posture's own change, with no Session: the conversations
+  // this affects do not exist yet, and naming one would describe a switch
+  // somebody made to a conversation they were looking at.
+  if (previous !== mode) recordChange?.({ session: undefined, previous, mode, actor: "user" });
+  return previous;
+}
+
+/**
+ * Forget one Session's mode.
+ *
+ * Called when the Session is disposed: the map is keyed by an identity that
+ * will not be seen again, and a long-running process opens sessions for as long
+ * as it runs.
+ */
+export function forgetSession(session: SessionKey): void {
+  modes.delete(session);
+}
+
+/**
+ * Reset to the startup posture, without recording.
  *
  * A test affordance: it restores the state the module is initialised with, so
  * it is not an event in the process's history and there is nothing for an audit
  * trail to say about it.
  */
 export function resetMode(): void {
-  current = STARTUP_MODE;
-}
-
-/** The mode this process started in, for logging and for `permission/get_mode`. */
-export function defaultMode(): PermissionMode {
-  return STARTUP_MODE;
+  posture = STARTUP_POSTURE;
+  modes.clear();
 }

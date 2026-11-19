@@ -1,9 +1,9 @@
 /**
  * Client half of the permission-mode switch, shared by both chips.
  *
- * The mode lives in the host process (`aishell-deploy`). A Host route reads and
- * writes it; this module owns the fetch and the state hook so the composer chip
- * and the hero chip cannot drift apart.
+ * The mode lives in the host process (`aishell-deploy`), one per Session. A
+ * Host route reads and writes it; this module owns the fetch and the state hook
+ * so the composer chip and the hero chip cannot drift apart.
  *
  * @module @huaweidevtools/aishell-dsh-client-credentials/client/permission-mode
  */
@@ -69,15 +69,18 @@ function asMode(value: unknown): PermissionMode | undefined {
 }
 
 /**
- * Read the current mode from the Host route.
+ * Read one Session's mode from the Host route.
  *
+ * @param sessionId - the conversation the chip is drawn in. Required: the route
+ *        refuses a request that names none rather than answering with a
+ *        process-wide value the chip would render as this conversation's own.
  * @returns the mode, or `undefined` when it could not be read — a broken link
  *          must not be rendered as a working lock, so an unreadable mode is
  *          reported as unknown, never as `read_only`.
  */
-export async function readPermissionMode(): Promise<PermissionMode | undefined> {
+export async function readPermissionMode(sessionId: string): Promise<PermissionMode | undefined> {
   try {
-    const response = await fetch(PERMISSION_ROUTE)
+    const response = await fetch(`${PERMISSION_ROUTE}?session=${encodeURIComponent(sessionId)}`)
     const body = await response.json() as { ok?: boolean; mode?: unknown }
     if (body.ok !== true) return undefined
     return asMode(body.mode)
@@ -87,17 +90,21 @@ export async function readPermissionMode(): Promise<PermissionMode | undefined> 
 }
 
 /**
- * Write the mode through the Host route.
+ * Write one Session's mode through the Host route.
  *
+ * @param sessionId - the conversation the switch belongs to.
  * @param mode - the mode to apply.
  * @returns the mode the server reports afterwards, or `undefined` on failure.
  */
-export async function writePermissionMode(mode: PermissionMode): Promise<PermissionMode | undefined> {
+export async function writePermissionMode(
+  sessionId: string,
+  mode: PermissionMode,
+): Promise<PermissionMode | undefined> {
   try {
     const response = await fetch(PERMISSION_ROUTE, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ mode }),
+      body: JSON.stringify({ session: sessionId, mode }),
     })
     const body = await response.json() as { ok?: boolean; mode?: unknown }
     if (body.ok !== true) return undefined
@@ -175,10 +182,13 @@ export interface PermissionConfirmation {
  * dialogs racing over one value. It is one hook whose surface can be swapped
  * under it.
  *
+ * @param sessionId - the conversation whose mode this control reads and writes.
+ *   One per chip: the mode belongs to a Session, so the hook cannot answer
+ *   without knowing which.
  * @returns the current mode, a busy flag, the gated toggle, and the
  *   confirmation state for a pending read-write flip.
  */
-export function usePermissionMode(): PermissionModeControl {
+export function usePermissionMode(sessionId: string): PermissionModeControl {
   const [mode, setMode] = useState<PermissionMode | undefined>(undefined)
   const [busy, setBusy] = useState(false)
   const [confirmation, setConfirmation] = useState<PermissionConfirmation | undefined>(undefined)
@@ -186,17 +196,17 @@ export function usePermissionMode(): PermissionModeControl {
   useEffect(() => {
     let live = true
     void (async () => {
-      const read = await readPermissionMode()
+      const read = await readPermissionMode(sessionId)
       if (live && read !== undefined) setMode(read)
     })()
     return () => { live = false }
-  }, [])
+  }, [sessionId])
 
   /** Write the mode the control should land on, from whatever is current. */
   const apply = (next: PermissionMode): void => {
     setBusy(true)
     void (async () => {
-      const applied = await writePermissionMode(next)
+      const applied = await writePermissionMode(sessionId, next)
       // Only adopt what the server confirms; a failed write leaves the button
       // showing the mode that is still in effect.
       if (applied !== undefined) setMode(applied)

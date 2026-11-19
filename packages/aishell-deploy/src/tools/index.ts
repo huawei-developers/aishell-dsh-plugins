@@ -14,9 +14,11 @@ import { registerTerraformTools } from "./terraform.js";
 /**
  * Register this plugin's tools on the DSH tool registry.
  *
- * Tool count: 18.
+ * ## What the set covers
  *
- *   部署目录 2 + 设计校验 1 + 规格 1 + 报价 1 + 华为云能力 4 + terraform 9 = 18
+ * A deployment's lifecycle end to end: the workspace, the design check, the
+ * flavour and image lookup, the quote, the HuaweiCloud capability surface, and
+ * the terraform family that runs it.
  *
  * ## No tool accepts a price
  *

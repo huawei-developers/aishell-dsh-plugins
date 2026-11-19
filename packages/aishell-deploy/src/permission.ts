@@ -23,10 +23,6 @@ export type PermissionMode = (typeof PERMISSION_MODES)[number]
 export interface PermissionModeState {
   /** Mode now in effect. */
   readonly mode: PermissionMode
-  /** Mode this process started in. */
-  readonly default: PermissionMode
-  /** Whether mutations are currently permitted. */
-  readonly writable: boolean
 }
 
 /** Result of `POST api/aishell/permission`. */

@@ -54,8 +54,8 @@ import { registerAllTools } from './tools/index.ts'
 import { configureCredentials, forgetAccount } from './credentials.ts'
 import { clearCredentials, readStoredPair } from '@huaweidevtools/aishell-dsh-credentials-store/accounts'
 import {
-  defaultPosture, forgetSession, getMode, installPermissionRecorder, pinSession, setDefaultPosture,
-  setMode, type PermissionChange,
+  applyStartupPosture, defaultPosture, forgetSession, getMode, installPermissionRecorder, pinSession,
+  setDefaultPosture, setMode, type PermissionChange, type PermissionMode,
 } from './permission/mode.ts'
 import type {} from '@huaweidevtools/aishell-dsh-audit'
 // Type-only: pulls the ctx.settings merge, so the account name another plugin
@@ -144,14 +144,32 @@ export interface Config {
    * lookup-shaped tool would want.
    */
   readonly toolCallTimeoutMs: Volatile<number>
+  /**
+   * The posture new Sessions start in, as this deployment declares it.
+   *
+   * Read-only by default. A deployment whose conversations are expected to make
+   * changes states it here, in the profile's patch: the patch is
+   * version-controlled and visible to whoever reviews the profile, and the
+   * declaration is the value every start reads.
+   *
+   * Not volatile: a posture is what a Session begins with, and Sessions that
+   * already exist keep the answer they were pinned to when they started.
+   * Editing this between calls leaves them as they are, so the field is a
+   * start-up statement rather than a live one.
+   */
+  readonly startupPosture: PermissionMode
 }
 
 /**
  * Settings schema.
  *
- * Every field is Volatile: each is a deployment fact that may differ between
- * profiles, and a change should apply to the next call rather than require a
- * restart. The bridge reads them through thunks for that reason.
+ * A field is Volatile when its change should apply to the next call rather than
+ * require a restart — a deployment fact that may differ between profiles. The
+ * bridge reads those through thunks for that reason.
+ *
+ * `startupPosture` is plain: a posture is what a Session begins with, and
+ * Sessions that already exist keep the answer they were pinned to, so the field
+ * is read once at mount rather than per call.
  *
  * `defaultRegion` has no `.default()`. A built-in region would be a guess
  * dressed as configuration — the one thing this plugin must not do, because the
@@ -162,6 +180,12 @@ export interface Config {
 export const Config = z.object({
   defaultRegion: z.string().volatile(),
   toolCallTimeoutMs: z.number().step(1).min(1).default(DEFAULT_TOOL_CALL_TIMEOUT_MS).volatile(),
+  // The two modes as a union of constants rather than a string field: the
+  // loader rejects a misspelling at start-up with the two accepted values in
+  // the message, instead of this plugin receiving a third spelling and having
+  // to decide what it means. Read-only is the default, so a deployment that
+  // says nothing starts safe.
+  startupPosture: z.union([z.const('read_only'), z.const('read_write')]).default('read_only'),
 })
 
 export const name = 'aishell-deploy'
@@ -174,8 +198,8 @@ export const name = 'aishell-deploy'
  * authenticated fetch registry, and a plugin that silently lost its permission
  * switch would leave every mutation at the default.
  * `sessions` is required because the permission mode is filed per Session: a
- * conversation is pinned to the posture when it is created, and the store is
- * what makes that possible for Sessions that exist before this plugin mounts.
+ * conversation is pinned to the posture when it starts, and the store is what
+ * makes that possible for Sessions that exist before this plugin mounts.
  */
 export const inject = ['tools', 'connection', 'sessions']
 
@@ -245,7 +269,24 @@ export function apply(ctx: Context, config: Config): void {
   // One mode per Session, held in this process. The route reads and writes the
   // module directly — no round trip, so a switch takes effect before the next
   // call starts rather than after the one already running.
-  log.info(`permission posture for new sessions: ${defaultPosture()}`)
+  //
+  // The order below is the posture's definition: the deployment's value is
+  // applied first, then Sessions are pinned to it. Pinning comes after, so the
+  // conversations already open when this plugin mounts start under the
+  // declared value rather than under the module's default.
+  applyStartupPosture(config.startupPosture)
+  /**
+   * The posture this process started in.
+   *
+   * Captured here, before any switch can be accepted, because the audit trail
+   * records it as its first entry — and that record is written later, when the
+   * audit service becomes available. Reading `defaultPosture()` at that point
+   * would report the posture in force then: a deployment that switched the
+   * posture before the audit plugin mounted would have its switch recorded as
+   * the start, which the trail cannot then tell from a start nobody watched.
+   */
+  const startupPosture = defaultPosture()
+  log.info(`permission posture for new sessions: ${startupPosture}`)
 
   // A Session's mode is keyed by an identity that will not be seen again once
   // it is disposed, so forgetting it here is what keeps a long-running process
@@ -254,19 +295,19 @@ export function apply(ctx: Context, config: Config): void {
     forgetSession(session.id)
   }), 'aishell-deploy: forget disposed session modes')
 
-  // Created Sessions are pinned to the posture in force at that moment, which
-  // is what keeps a later posture change from reaching a conversation that is
-  // already on screen. `session/created` also fires for a restored session, and
-  // `pinSession` leaves an existing entry alone, so a resumed conversation keeps
-  // the answer it already had.
+  // A Session is pinned to the posture in force when it starts, which is what
+  // keeps a later posture change from reaching a conversation already on
+  // screen. `session/created` fires for a restored Session too; a restore
+  // arrives with no entry, so it takes the posture this process started with,
+  // while a conversation that is already running keeps its own.
   ctx.effect(() => ctx.on('session/created', (session) => {
     pinSession(session.id)
   }), 'aishell-deploy: pin created session modes')
 
   // Sessions that exist at mount are pinned to the posture in force now: their
-  // creation predates this plugin, so the posture they began under is not a fact
-  // the plugin can still observe. From here on they carry their own entry, which
-  // is the same rule every later Session gets.
+  // start predates this plugin, so the posture they began under is not a fact
+  // the plugin can still observe. From here on they carry their own entry,
+  // which is the same rule every later Session gets.
   for (const session of ctx.sessions.list()) pinSession(session.id)
 
   // ── Audit ────────────────────────────────────────────────────────────────
@@ -346,10 +387,12 @@ export function apply(ctx: Context, config: Config): void {
       }
     }
 
-    // The posture new Sessions start in is part of the trail, recorded before
+    // The posture new Sessions started in is part of the trail, recorded before
     // any switch: a log whose first entry is a person weakening that posture
-    // cannot be told from one where nobody was watching before it.
-    recordChange({ session: undefined, previous: undefined, mode: defaultPosture(), actor: 'startup' })
+    // cannot be told from one where nobody was watching before it. The value is
+    // the one captured at mount, not read now — this body runs when the audit
+    // service becomes available, which can be after a switch was accepted.
+    recordChange({ session: undefined, previous: undefined, mode: startupPosture, actor: 'startup' })
 
     // Every later change passes through `setMode`, so installing the recorder
     // there is what makes the trail gapless: no caller has to remember.

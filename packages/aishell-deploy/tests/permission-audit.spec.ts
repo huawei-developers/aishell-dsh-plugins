@@ -125,6 +125,7 @@ describe('permission changes — plugin composition', () => {
     applyDeploy(ctx as never, {
       defaultRegion: { get: () => undefined },
       toolCallTimeoutMs: { get: () => 600_000 },
+      startupPosture: 'read_only',
     } as never)
     expect(pending).toBeDefined()
 
@@ -151,6 +152,43 @@ describe('permission changes — plugin composition', () => {
     })
   })
 
+  it('records the posture the process started in, not the one in force when the trail opens', () => {
+    // The audit service can arrive after a switch has been accepted. The
+    // startup entry describes the value the process started with, so reading
+    // the posture at record time would write that switch down as the start —
+    // and the trail could no longer tell a watched start from an unwatched one.
+    const seen: Array<Record<string, unknown>> = []
+    const audit = { record: (event: Record<string, unknown>) => { seen.push(event) } }
+
+    let pending: ((child: unknown) => void) | undefined
+    const ctx = {
+      logger: () => ({ info: () => {}, warn: () => {}, error: () => {} }),
+      effect: (effect: () => (() => void)) => { effect() },
+      get: () => undefined,
+      on: () => () => {},
+      tools: { get: () => undefined, register: () => () => {} },
+      connection: { fetch: { register: () => () => {} } },
+      sessions: { list: () => [] },
+      inject: (deps: string[], callback: (child: unknown) => void) => {
+        if (deps.includes('audit')) pending = callback
+      },
+    }
+
+    applyDeploy(ctx as never, {
+      defaultRegion: { get: () => undefined },
+      toolCallTimeoutMs: { get: () => 600_000 },
+      startupPosture: 'read_only',
+    } as never)
+
+    // A switch lands before the service exists.
+    modeModule.setDefaultPosture('read_write')
+
+    pending!({ audit, effect: (effect: () => (() => void)) => { effect() } })
+
+    expect(seen).toHaveLength(1)
+    expect(seen[0]).toMatchObject({ outcome: 'revoked', actor: 'startup', detail: { to: 'read_only' } })
+  })
+
   it('records the posture the process started in', () => {
     // Every process starts read-only, and the trail says so before any switch:
     // a log whose first entry is a user's weakening of that posture cannot be
@@ -175,6 +213,7 @@ describe('permission changes — plugin composition', () => {
     applyDeploy(ctx as never, {
       defaultRegion: { get: () => undefined },
       toolCallTimeoutMs: { get: () => 600_000 },
+      startupPosture: 'read_only',
     } as never)
     pending!({ audit, effect: (effect: () => (() => void)) => { effect() } })
 
@@ -211,6 +250,7 @@ describe('permission changes — a failing audit', () => {
     applyDeploy(ctx as never, {
       defaultRegion: { get: () => undefined },
       toolCallTimeoutMs: { get: () => 600_000 },
+      startupPosture: 'read_only',
     } as never)
     expect(() => pending!({ audit, effect: (effect: () => (() => void)) => { effect() } })).not.toThrow()
 

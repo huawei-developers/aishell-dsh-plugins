@@ -90,6 +90,89 @@ export async function readPermissionMode(sessionId: string): Promise<PermissionM
 }
 
 /**
+ * Delays between read attempts while the mode is unknown.
+ *
+ * A Host answers a read once `api/aishell/permission` is registered; while the
+ * route is absent the answer is `undefined`. A conversation the browser
+ * restores can reach the page inside that window, so the schedule below gives
+ * the read a second attempt: short at first, because the route appears within
+ * a round trip of the Host being ready, and longer as the wait goes on, because
+ * each attempt costs a request.
+ *
+ * The list is finite: a mode that stays unreadable is answered by the manual
+ * re-read on the control, not by a request every few seconds for the life of
+ * the page. Together the delays cover roughly twenty seconds of start-up.
+ */
+export const MODE_READ_RETRY_DELAYS_MS = [200, 500, 1000, 2000, 3000, 5000, 8000] as const
+
+/**
+ * How long to wait before the next read, given how many have failed.
+ *
+ * @param failedAttempts - consecutive reads that returned no mode.
+ * @returns the delay in milliseconds; the final entry repeats.
+ */
+export function modeReadRetryDelay(failedAttempts: number): number {
+  const last = MODE_READ_RETRY_DELAYS_MS.length - 1
+  return MODE_READ_RETRY_DELAYS_MS[Math.min(Math.max(failedAttempts, 0), last)]!
+}
+
+/** What {@link readPermissionModeUntilKnown} reads through. */
+export interface ModeReadDeps {
+  /** One attempt; resolves `undefined` when it could not answer. */
+  readonly read: () => Promise<PermissionMode | undefined>
+  /**
+   * Whether the caller is still mounted.
+   *
+   * Checked before each retry, so a read belongs to the surface that started
+   * it: a chip that unmounted stops asking, and no request goes out naming a
+   * conversation no page is showing.
+   */
+  readonly isLive: () => boolean
+  /** Wait between attempts; injectable so a spec drives the schedule directly. */
+  readonly sleep?: (ms: number) => Promise<void>
+}
+
+/**
+ * Read the mode, retrying over the start-up window.
+ *
+ * A successful read is the server's answer and ends the loop, so the ordinary
+ * case costs one request. Retries cover the interval in which the Host has not
+ * registered the route yet and answers `undefined`; a mode that has been read
+ * is final until the person changes it.
+ *
+ * Attempts are bounded by {@link MODE_READ_RETRY_DELAYS_MS}. `undefined` then
+ * means "still unknown", not "the mode is absent", and the control stays
+ * interactive so the person can ask again without reloading the page.
+ *
+ * @param deps - the read, the liveness check, and an optional sleep.
+ * @returns the mode once one is read, or `undefined` when the caller went away
+ *          or the attempts ran out.
+ */
+export async function readPermissionModeUntilKnown(
+  deps: ModeReadDeps,
+): Promise<PermissionMode | undefined> {
+  const sleep = deps.sleep ?? ((ms: number) => new Promise<void>(resolve => { setTimeout(resolve, ms) }))
+  // One attempt at a time is the shape of the schedule: a delay follows an
+  // attempt that answered nothing, so overlapping attempts collapse the
+  // schedule into a burst of reads made at the same moment. Both `await`s below
+  // carry their own suppression for that reason.
+  //
+  // The loop makes one attempt more than there are delays, so the last wait is
+  // followed by a read rather than spent on nothing.
+  for (let failed = 0; failed <= MODE_READ_RETRY_DELAYS_MS.length; failed += 1) {
+    // oxlint-disable-next-line no-await-in-loop
+    const mode = await deps.read()
+    if (mode !== undefined) return mode
+    if (!deps.isLive() || failed === MODE_READ_RETRY_DELAYS_MS.length) return undefined
+    // oxlint-disable-next-line no-await-in-loop
+    await sleep(modeReadRetryDelay(failed))
+    if (!deps.isLive()) return undefined
+  }
+  /* v8 ignore next -- the loop returns on the final iteration */
+  return undefined
+}
+
+/**
  * Write one Session's mode through the Host route.
  *
  * @param sessionId - the conversation the switch belongs to.
@@ -128,7 +211,9 @@ export interface PermissionModeControl {
    * once the person acknowledges. A flip back to read-only gives up access,
    * which needs no warning, so it applies immediately.
    *
-   * No-op while unknown or busy.
+   * No-op while unknown or busy. A press on an unknown-mode control belongs to
+   * {@link reread}: there is no current mode to flip away from, and the control
+   * that reaches this function has one meaning per state.
    */
   readonly toggle: () => void
   /**
@@ -144,6 +229,20 @@ export interface PermissionModeControl {
   readonly cancelConfirmation: () => void
   /** Apply the awaited read-write flip; the confirmation must be open. */
   readonly confirmToggle: () => void
+  /**
+   * Read the mode again, for a control showing "unavailable".
+   *
+   * Starts a fresh read. Its first attempt is immediate, so a Host that has
+   * registered the route since answers within a round trip and the control
+   * updates at once; a Host still not ready resumes the schedule from its
+   * shortest delay, which keeps a press immediate rather than making it wait
+   * out a delay that a previous read already used.
+   *
+   * One read runs at a time: the new generation unmounts the previous effect
+   * first, whose loop stops before its next retry, so repeated presses cannot
+   * accumulate loops.
+   */
+  readonly reread: () => void
 }
 
 /** The gate shown before a flip to read-write. */
@@ -157,9 +256,19 @@ export interface PermissionConfirmation {
 /**
  * Subscribe a control to the permission mode.
  *
- * Reads once on mount. The mode is server state that only a person changes, so
- * there is no poll — a second surface flipping it is not a case this handles;
- * each surface re-reads on its own mount.
+ * Reads on mount, and reads again when the person asks. The mode is server
+ * state that only a person changes, so there is no poll: each surface re-reads
+ * on its own mount, and a press on an unknown-mode control is the one other
+ * trigger.
+ *
+ * ## Why the read retries
+ *
+ * The mode lives in the Host process, and a page can render before that process
+ * has put `api/aishell/permission` in place — a restored conversation reaches
+ * the browser before the Host finishes registering its routes. A read in that
+ * window answers nothing about the mode, so the first read retries over a short
+ * schedule rather than reporting "unknown" from one attempt. The control a
+ * person presses reads again, which covers a window that was still too early.
  *
  * ## Why the confirmation lives here rather than in a chip
  *
@@ -192,15 +301,28 @@ export function usePermissionMode(sessionId: string): PermissionModeControl {
   const [mode, setMode] = useState<PermissionMode | undefined>(undefined)
   const [busy, setBusy] = useState(false)
   const [confirmation, setConfirmation] = useState<PermissionConfirmation | undefined>(undefined)
+  /**
+   * Bumped by {@link reread} to run the read again.
+   *
+   * A counter rather than a flag, so each press is a state change: a flag
+   * returned to `false` on completion either swallows a press made during a
+   * read or re-runs the effect on a value that did not change. The previous
+   * effect's cleanup runs before the new one, so its loop stops rather than
+   * overlapping.
+   */
+  const [readGeneration, setReadGeneration] = useState(0)
 
   useEffect(() => {
     let live = true
     void (async () => {
-      const read = await readPermissionMode(sessionId)
+      const read = await readPermissionModeUntilKnown({
+        read: () => readPermissionMode(sessionId),
+        isLive: () => live,
+      })
       if (live && read !== undefined) setMode(read)
     })()
     return () => { live = false }
-  }, [sessionId])
+  }, [sessionId, readGeneration])
 
   /** Write the mode the control should land on, from whatever is current. */
   const apply = (next: PermissionMode): void => {
@@ -237,5 +359,7 @@ export function usePermissionMode(sessionId: string): PermissionModeControl {
     apply('read_write')
   }
 
-  return { mode, busy, toggle, confirmation, cancelConfirmation, confirmToggle }
+  const reread = (): void => { setReadGeneration(generation => generation + 1) }
+
+  return { mode, busy, toggle, confirmation, cancelConfirmation, confirmToggle, reread }
 }

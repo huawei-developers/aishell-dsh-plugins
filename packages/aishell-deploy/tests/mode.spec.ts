@@ -11,6 +11,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 
 import {
+  applyStartupPosture,
   defaultPosture,
   forgetSession,
   getMode,
@@ -96,14 +97,30 @@ describe('mode — lifetime', () => {
   })
 
   it('pins a Session once, not again on a re-entry', () => {
-    // A restored Session announces `session/created` again; re-pinning it to a
-    // posture that has since changed would silently widen it.
+    // Within one run a Session keeps the answer it was given: a posture change
+    // followed by another `pinSession` for the same id leaves its own entry
+    // alone.
     pinSession('s1')
     setMode('s1', 'read_write')
     setDefaultPosture('read_only')
     pinSession('s1')
 
     expect(getMode('s1')).toBe('read_write')
+  })
+
+  it('takes the new posture for a Session restored into a new run', () => {
+    // A restart clears every entry — the map lives in the process. A restored
+    // conversation re-enters with none and is pinned to the posture the new
+    // process started with, so a deployment's `startupPosture` decides what a
+    // reopened conversation begins in.
+    pinSession('s1')
+    setMode('s1', 'read_write')
+
+    resetMode()
+    applyStartupPosture('read_only')
+    pinSession('s1')
+
+    expect(getMode('s1')).toBe('read_only')
   })
 
   it('restores the startup state on reset, entries included', () => {
@@ -115,5 +132,43 @@ describe('mode — lifetime', () => {
 
     expect(defaultPosture()).toBe('read_only')
     expect(getMode('s1')).toBe('read_only')
+  })
+})
+
+describe('mode — the posture a deployment declares', () => {
+  it('answers the declared posture before anything is switched', () => {
+    applyStartupPosture('read_write')
+
+    expect(defaultPosture()).toBe('read_write')
+    expect(getMode(undefined)).toBe('read_write')
+  })
+
+  it('pins a Session created under the declared posture', () => {
+    applyStartupPosture('read_write')
+    pinSession('fresh')
+
+    expect(getMode('fresh')).toBe('read_write')
+  })
+
+  it('is replaced by a running override, and restored by the next start', () => {
+    // The override is the switch a person makes; the declared posture is what
+    // the deployment says. A start re-applies the latter, so the override
+    // covers one process and the declaration covers every start.
+    applyStartupPosture('read_write')
+    setDefaultPosture('read_only')
+    expect(defaultPosture()).toBe('read_only')
+
+    applyStartupPosture('read_write')
+    expect(defaultPosture()).toBe('read_write')
+  })
+
+  it('pins a Session once the declared posture is applied, not to the default', () => {
+    // The order the plugin applies these in is the posture's definition: the
+    // declared value is in place before anything is pinned, so a Session that
+    // was open at mount starts under it.
+    applyStartupPosture('read_write')
+    pinSession('pre-existing')
+
+    expect(getMode('pre-existing')).toBe('read_write')
   })
 })

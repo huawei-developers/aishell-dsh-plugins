@@ -56,10 +56,16 @@ The switch belongs to one Session, read and written directly by
 starts, not after the one already running. Two conversations open in one window
 are two decisions: granting write access in one does not widen the other.
 
-Every Session starts in the posture — read-only unless a deployment set
-`POST api/aishell/permission/default`. Each Session is pinned to the posture in
-force when it was created, so that setting decides what the next conversation
-starts in and leaves existing ones as they are.
+Every Session starts in the posture: read-only unless the deployment declares
+`startupPosture: read_write` in its profile patch, or a running process overrides
+it with `POST api/aishell/permission/default`. Each Session is pinned to the
+posture in force when it starts, so a posture change reaches the next
+conversation to begin and leaves one already running as it is.
+
+`startupPosture` is a deployment statement, read at every start. The route's
+override is a running decision and ends with the process. A permanent change
+belongs in the patch, which is version-controlled and reviewed with the
+profile.
 
 It is enforced in two places, because the tools reach the cloud two ways:
 
@@ -91,6 +97,7 @@ producing the plan and the exact commands — rather than stopping early.
 |---|---|---|---|
 | `defaultRegion` | `string?` | unset | A fallback for a plan that names no region, and the `HW_REGION_NAME` terraform runs under. Unset means each resource's provider block decides. |
 | `toolCallTimeoutMs` | `number?` | 10 minutes | Per-call budget. A real `terraform_apply` runs for minutes, so the default is above that rather than the seconds a lookup tool would want. |
+| `startupPosture` | `read_only` \| `read_write` | `read_only` | What new Sessions start in. Read-only unless the deployment says otherwise, because a conversation may look at the account before anyone has decided it may change it. |
 
 There is no built-in region. A region belongs to each resource, read from the
 provider block its plan names, so a deployment-wide default would have to be

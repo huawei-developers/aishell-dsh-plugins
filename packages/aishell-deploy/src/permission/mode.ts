@@ -44,11 +44,15 @@
  * ## What a restart guarantees
  *
  * Neither a Session's mode nor the posture is persisted, so a restart returns
- * both to read-only. A conversation that needs write access is granted it again,
- * which is the safe direction to fail. A deployment that wants new Sessions to
- * start in write access states that after start-up, over
- * `POST api/aishell/permission/default` — the posture is a running decision, not
- * a stored one, so nothing survives that would disagree with it.
+ * both to `startupPosture`, which defaults to read-only. A conversation that
+ * needs write access is granted it again, which is the safe direction to fail.
+ *
+ * `startupPosture` is a deployment statement — a line in the profile's patch —
+ * and `setDefaultPosture` is a running override on top of it. The override
+ * ends with the process: the next start reads the deployment's value, so a
+ * running process widened for the work at hand comes back the way the
+ * deployment configured it. A deployment whose new Sessions start in write
+ * access for good says so in `startupPosture`, which every start reads.
  *
  * @module permission/mode
  */
@@ -117,16 +121,22 @@ export function installPermissionRecorder(
 }
 
 /**
- * The posture every Session starts in.
+ * What a module answers before any deployment statement is applied.
  *
- * Read-only unless the deployment asked for otherwise before any conversation
- * opened. A Session is pinned to this value when it is created, so a later
- * change reaches only Sessions that have not started yet.
+ * Read-only, and the value {@link resetMode} restores: a restart must come back
+ * to a state the process can defend without having been told anything, not to
+ * whatever a caller happened to set last.
  */
-const STARTUP_POSTURE: PermissionMode = "read_only";
+const DEFAULT_POSTURE: PermissionMode = "read_only";
 
-/** The posture new Sessions are pinned to. Not retroactive — see the module header. */
-let posture: PermissionMode = STARTUP_POSTURE;
+/**
+ * The posture new Sessions are pinned to.
+ *
+ * Starts at {@link DEFAULT_POSTURE} and is set from the deployment's
+ * `startupPosture` once the plugin mounts, then by a running override
+ * afterwards. Not retroactive — see the module header.
+ */
+let posture: PermissionMode = DEFAULT_POSTURE;
 
 /** Modes by Session. Every created Session has an entry; `posture` covers the rest. */
 const modes = new Map<SessionKey, PermissionMode>();
@@ -197,17 +207,37 @@ export function writesAllowed(session: SessionKey | undefined): boolean {
 }
 
 /**
- * Give one Session its own mode, decided by the posture in force at creation.
+ * Give one Session its own mode, decided by the posture in force at that moment.
  *
- * Every Session carries an entry from the moment it exists, which is what makes
- * a posture change reach only Sessions that have not started. A Session pinned
- * here keeps the answer it was created with, so a conversation on screen is
- * never widened from underneath the person reading it.
+ * Every Session carries an entry from the moment it starts, which is what makes
+ * a posture change reach only Sessions that have not started. A Session that
+ * already has an entry keeps it, so a conversation on screen is never widened
+ * from underneath the person reading it — and a restored one re-enters with no
+ * entry, taking the posture the process started with.
  *
- * @param session - the Session being created.
+ * @param session - the Session being started.
  */
 export function pinSession(session: SessionKey): void {
   if (!modes.has(session)) modes.set(session, posture);
+}
+
+/**
+ * Apply the posture a deployment configured, before anything else runs.
+ *
+ * Separate from {@link setDefaultPosture} because it describes two different
+ * acts: this is the value the process starts in, which the plugin records once
+ * as the trail's first entry under the `startup` actor; that one is a switch a
+ * person makes, recorded under `user`. One record per act, and the trail names
+ * who acted.
+ *
+ * Called before Sessions are pinned, so the Sessions already open when the
+ * plugin mounts (and every one created afterwards) start under the value the
+ * deployment declared.
+ *
+ * @param mode - the configured posture.
+ */
+export function applyStartupPosture(mode: PermissionMode): void {
+  posture = mode;
 }
 
 /**
@@ -215,6 +245,8 @@ export function pinSession(session: SessionKey): void {
  *
  * Every Session already has an entry of its own, so this decides what Sessions
  * created from now on begin with and leaves existing conversations as they are.
+ * It is an override of the deployment's `startupPosture` for this process: the
+ * next start reads the configured value again.
  *
  * @param mode - the posture to apply.
  * @returns the posture it replaced.
@@ -223,8 +255,8 @@ export function setDefaultPosture(mode: PermissionMode): PermissionMode {
   const previous = posture;
   posture = mode;
   // Recorded as the posture's own change, with no Session: the conversations
-  // this affects do not exist yet, and naming one would describe a switch
-  // somebody made to a conversation they were looking at.
+  // this affects do not exist yet, and the record describes the posture rather
+  // than a conversation somebody was looking at.
   if (previous !== mode) recordChange?.({ session: undefined, previous, mode, actor: "user" });
   return previous;
 }
@@ -241,13 +273,13 @@ export function forgetSession(session: SessionKey): void {
 }
 
 /**
- * Reset to the startup posture, without recording.
+ * Reset to the posture the module answers before anything configures it.
  *
  * A test affordance: it restores the state the module is initialised with, so
  * it is not an event in the process's history and there is nothing for an audit
  * trail to say about it.
  */
 export function resetMode(): void {
-  posture = STARTUP_POSTURE;
+  posture = DEFAULT_POSTURE;
   modes.clear();
 }

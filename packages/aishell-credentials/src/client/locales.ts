@@ -16,7 +16,8 @@ export const zh = {
   'mode.unavailable': '权限模式不可用',
   'mode.readonly.hint': '当前：只读 — 只允许查询云资源，点击切换为读写',
   'mode.readwrite.hint': '当前：读写 — 允许变更云资源，点击切换为只读',
-  'mode.unavailable.hint': '无法读取权限模式；切换按钮暂不可用',
+  'mode.unavailable.hint': '无法读取权限模式；点击重试',
+  'mode.unavailable.retry': '重新读取权限模式',
   'mode.switchToReadonly': '切换为只读模式',
   'mode.switchToReadwrite': '切换为读写模式',
 
@@ -114,7 +115,8 @@ export const en = {
   'mode.unavailable': 'Mode unavailable',
   'mode.readonly.hint': 'Read-only — cloud queries only. Click for read-write',
   'mode.readwrite.hint': 'Read-write — cloud changes allowed. Click for read-only',
-  'mode.unavailable.hint': 'Could not read the permission mode; the toggle is unavailable',
+  'mode.unavailable.hint': 'Could not read the permission mode; click to retry',
+  'mode.unavailable.retry': 'Read the permission mode again',
   'mode.switchToReadonly': 'Switch to read-only mode',
   'mode.switchToReadwrite': 'Switch to read-write mode',
 

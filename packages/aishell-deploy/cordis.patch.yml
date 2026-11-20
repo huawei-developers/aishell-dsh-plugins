@@ -10,6 +10,12 @@
 #     two never disagree.
 #   - `toolCallTimeoutMs` is 10 minutes: terraform_apply of a real network takes
 #     minutes, and a shorter budget reports a timeout on work still in progress.
+#   - `startupPosture` is `read_only`: a new Session may look at the account
+#     before anyone has decided it may change it. Set it to `read_write` in a
+#     deployment where every new conversation is expected to make changes.
+#     It decides what every Session begins with — a new one, or one the host
+#     restores at start — so changing it changes what a reopened conversation
+#     starts in. Within one run, a Session keeps the answer it was given.
 #
 # The credential store is the shared `aishell-dsh` one, read per call.
 #

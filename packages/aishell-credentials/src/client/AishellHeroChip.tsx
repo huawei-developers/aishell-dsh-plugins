@@ -72,7 +72,7 @@ export function AishellHeroChip(props: AishellHeroChipProps): ReactNode {
   // whole dock band — the crash the first end-to-end run caught.
   const blank = props.useSession(session => session.blank)
   const status = props.useCredentials(snapshot => snapshot)
-  const { mode, busy, toggle, confirmation, cancelConfirmation, confirmToggle } = usePermissionMode(props.sessionId)
+  const { mode, busy, toggle, confirmation, cancelConfirmation, confirmToggle, reread } = usePermissionMode(props.sessionId)
   const t = props.t
   // Bound in apply: opens the credential form in this conversation.
   const openCredentialForm = props.openCredentialForm
@@ -267,9 +267,15 @@ export function AishellHeroChip(props: AishellHeroChipProps): ReactNode {
       {configured && (
         <button
           type="button"
-          onClick={() => { void toggle() }}
-          disabled={mode === undefined || busy}
-          aria-label={mode === 'read_write' ? t('mode.switchToReadonly') : t('mode.switchToReadwrite')}
+          // One control, one action per state: a known mode flips, an unknown
+          // one reads again, so the button answers every press.
+          onClick={() => { if (mode === undefined) reread(); else void toggle() }}
+          disabled={busy}
+          aria-label={
+            mode === undefined
+              ? t('mode.unavailable.retry')
+              : mode === 'read_write' ? t('mode.switchToReadonly') : t('mode.switchToReadwrite')
+          }
           title={
             mode === undefined
               ? t('mode.unavailable.hint')
@@ -284,8 +290,8 @@ export function AishellHeroChip(props: AishellHeroChipProps): ReactNode {
               : mode === 'read_only'
                 ? 'var(--dsw-alias-state-success-primary)'
                 : 'var(--dsw-alias-state-warn-label)',
-            opacity: mode === undefined || busy ? 0.6 : 1,
-            cursor: mode === undefined || busy ? 'default' : 'pointer',
+            opacity: busy ? 0.6 : 1,
+            cursor: busy ? 'default' : 'pointer',
           }}
         >
           {mode === undefined

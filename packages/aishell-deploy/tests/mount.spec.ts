@@ -190,7 +190,9 @@ function makeCtx(): { ctx: never, logger: { info: ReturnType<typeof vi.fn>, warn
 }
 
 /** Config as the loader supplies it: every field readable. */
-function makeConfig(overrides: { region?: string | undefined, timeoutMs?: number } = {}): never {
+function makeConfig(
+  overrides: { region?: string | undefined, timeoutMs?: number, startupPosture?: 'read_only' | 'read_write' } = {},
+): never {
   // No built-in region: the fixture passes through exactly what a profile
   // would, so "unset" is representable. Defaulting here would hide the very
   // distinction the plugin no longer makes on its own.
@@ -199,6 +201,8 @@ function makeConfig(overrides: { region?: string | undefined, timeoutMs?: number
     // Mirrors `Config`'s default: ten minutes, because terraform runs are the
     // heaviest calls this plugin makes.
     toolCallTimeoutMs: { get: () => overrides.timeoutMs ?? 10 * 60 * 1000 },
+    // Mirrors `Config`'s default. A profile that says nothing starts read-only.
+    startupPosture: overrides.startupPosture ?? 'read_only',
   } as never
 }
 
@@ -631,5 +635,30 @@ describe('aishell-deploy — Sessions that predate the plugin', () => {
     modeModule.setDefaultPosture('read_write')
 
     expect(modeModule.getMode('pre-existing')).toBe('read_only')
+  })
+})
+
+describe('aishell-deploy — the declared startup posture', () => {
+  it('pins Sessions created under it', () => {
+    apply(makeCtx().ctx, makeConfig({ startupPosture: 'read_write' }))
+    listeners.get('session/created')?.forEach(listener => { listener({ id: 'fresh' }) })
+
+    expect(modeModule.getMode('fresh')).toBe('read_write')
+  })
+
+  it('reaches Sessions that were open when the plugin mounted', () => {
+    // The posture is applied before those Sessions are pinned, which is what
+    // puts a conversation that predates the plugin under the declared value.
+    liveSessions = ['pre-existing']
+    apply(makeCtx().ctx, makeConfig({ startupPosture: 'read_write' }))
+
+    expect(modeModule.getMode('pre-existing')).toBe('read_write')
+  })
+
+  it('still answers read-only when the profile says nothing', () => {
+    apply(makeCtx().ctx, makeConfig())
+    listeners.get('session/created')?.forEach(listener => { listener({ id: 'fresh' }) })
+
+    expect(modeModule.getMode('fresh')).toBe('read_only')
   })
 })

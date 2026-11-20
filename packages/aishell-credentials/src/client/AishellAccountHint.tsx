@@ -74,7 +74,7 @@ export function AishellAccountHint(props: AishellAccountHintProps): ReactNode {
   // Shared with the hero chip so the two surfaces cannot drift apart. The
   // read-write risk gate's state comes back with the mode: both chips drive the
   // same host-side switch, so the confirmation is owned once, here.
-  const { mode, busy, toggle, confirmation, cancelConfirmation, confirmToggle } = usePermissionMode(props.sessionId)
+  const { mode, busy, toggle, confirmation, cancelConfirmation, confirmToggle, reread } = usePermissionMode(props.sessionId)
 
   // Promote the host dock container to a flex row: chip right, ContextMeter
   // left. The host owns the container's class-based styles; inline `display`
@@ -162,14 +162,19 @@ export function AishellAccountHint(props: AishellAccountHintProps): ReactNode {
         <button
           type="button"
           className={CHIP_CLASS}
-          onClick={() => { void toggle() }}
-          disabled={mode === undefined || busy}
+          // One control, one action per state: a known mode flips, an unknown
+          // one reads again, so the button answers every press.
+          onClick={() => { if (mode === undefined) reread(); else void toggle() }}
+          disabled={busy}
           // The label names the action, not the current state — the visible
-          // text already says which mode is in effect. It also has to stay
-          // correct while the mode is unknown: `disabled` removes the button
-          // from the tab order, so this string is what a screen reader
-          // announces, and "read-only" would be a claim nothing verified.
-          aria-label={mode === 'read_write' ? t('mode.switchToReadonly') : t('mode.switchToReadwrite')}
+          // text already says which mode is in effect. While the mode is
+          // unknown the action is the re-read, because that is what the press
+          // performs.
+          aria-label={
+            mode === undefined
+              ? t('mode.unavailable.retry')
+              : mode === 'read_write' ? t('mode.switchToReadonly') : t('mode.switchToReadwrite')
+          }
           style={{
             ...pillStyle,
             color: mode === undefined
@@ -177,8 +182,8 @@ export function AishellAccountHint(props: AishellAccountHintProps): ReactNode {
               : mode === 'read_only'
                 ? 'var(--dsw-alias-state-success-primary)'
                 : 'var(--dsw-alias-state-warn-label)',
-            opacity: mode === undefined || busy ? 0.6 : 1,
-            cursor: mode === undefined || busy ? 'default' : 'pointer',
+            opacity: busy ? 0.6 : 1,
+            cursor: busy ? 'default' : 'pointer',
           }}
           title={
             mode === undefined

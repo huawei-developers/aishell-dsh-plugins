@@ -265,16 +265,12 @@ for (const { path, field, name, range } of changes) {
   console.log(`[vet] ${relative(ROOT, path)}`)
 }
 
-if (dryRun) {
-  console.log(`\n[vet] dry run — ${changes.length} range(s) would ${replace ? 'be replaced by' : 'extend to include'} ${version}`)
-  process.exit(0)
-}
-
 // Verification: the point of the run is that every range was covered, so the
 // result is read back rather than inferred from the plan. Append checks
 // membership, because a range that already named the release keeps the position
 // it had; replace checks equality, because the point of that mode is that the
-// new release is the only one left.
+// new release is the only one left. A dry run skips it: no file was written, so
+// the ranges on disk still say what they said before.
 const late = []
 for (const dir of readdirSync(PACKAGES).sort()) {
   const path = join(PACKAGES, dir, 'package.json')
@@ -294,8 +290,10 @@ for (const dir of readdirSync(PACKAGES).sort()) {
   }
 }
 
+// The reports below describe the tree, not the run, so a dry run prints them
+// too: they are the findings a person wants *before* writing the manifests.
 console.log(
-  `\n[vet] ${replace ? 'replaced' : 'extended'} ${changes.length} range(s) with ${version}`
+  `${dryRun ? 'dry run — ' : ''}[vet] ${replace ? 'replaced' : 'extended'} ${changes.length} range(s) with ${version}`
   + (alreadyThere > 0 ? `, ${alreadyThere} already listed it` : '')
   + (untouched > 0 ? `, ${untouched} package(s) had no dsh range` : ''),
 )
@@ -311,17 +309,22 @@ if (behindTail.length > 0) {
   console.log('[vet] npm reads a union range in any order; the order records vetting history, so it is left as written.')
 }
 
+if (ungated.length > 0) {
+  console.log(`\n[vet] ${ungated.length} bundle(s) declare no ${RANGE_PREFIX}* range, so the loader loads them on any host version:`)
+  for (const path of ungated) console.log(`[vet]   ${path}`)
+  console.log('[vet] adding a requirement is a manifest change; it belongs to the package that owns it.')
+}
+
+if (dryRun) {
+  console.log('\n[vet] dry run — nothing written')
+  process.exit(0)
+}
+
 if (late.length > 0) {
   console.error(`\n[vet] ${late.length} range(s) do not name ${version}:`)
   for (const line of late) console.error(`[vet]   ${line}`)
   console.error('[vet] the tree is written; inspect the ranges above by hand')
   process.exit(1)
-}
-
-if (ungated.length > 0) {
-  console.log(`\n[vet] ${ungated.length} bundle(s) declare no ${RANGE_PREFIX}* range, so the loader loads them on any host version:`)
-  for (const path of ungated) console.log(`[vet]   ${path}`)
-  console.log('[vet] adding a requirement is a manifest change; it belongs to the package that owns it.')
 }
 
 if (changes.length > 0) {

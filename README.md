@@ -106,7 +106,7 @@ published — only the tag is behind — so name the version once and the warnin
 disappear:
 
 ```sh
-npm install @deepseek-ai/dsh-base@0.2.2-rc.3
+npm install @deepseek-ai/dsh-base@0.2.2-rc.5
 ```
 
 This is a statement about the upstream tags, not about these packages: nothing
@@ -169,14 +169,25 @@ To see what a package supports:
 node -p "require('./packages/aishell-deploy/package.json').peerDependencies['@deepseek-ai/dsh-tools']"
 ```
 
-To add a release to the supported set, extend every range that currently ends at
-the previous one:
+To add a release to the supported set, run the vetting script over the whole
+workspace. By default it appends the release to every range, so hosts already
+listed stay supported:
 
 ```sh
-node scripts/vet-dsh-release.mjs 0.2.2-rc.3
+node scripts/vet-dsh-release.mjs 0.2.2-rc.5
 ```
 
-When upgrading DSH, run `pnpm run typecheck` to catch API changes.
+When a release supersedes the ones before it — the older hosts are being
+dropped, not continued — pass `--replace` so every range becomes exactly that
+one version:
+
+```sh
+node scripts/vet-dsh-release.mjs 0.2.2-rc.5 --replace
+```
+
+Either way, follow with `pnpm install` and `pnpm run typecheck`. The install
+re-resolves the lockfile to the version now named, and the typecheck is what
+catches an API change that the new release brought.
 
 ## License
 

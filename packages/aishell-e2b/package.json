@@ -35,16 +35,16 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.1.0",
-    "@deepseek-ai/dsh-fs": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
-    "@deepseek-ai/dsh-system-prompt": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
-    "@deepseek-ai/dsh-tools": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3"
+    "@deepseek-ai/dsh-fs": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-system-prompt": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.5"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.1.0",
     "@deepseek-ai/cordis-plugin-loader": "^1.1.0",
-    "@deepseek-ai/dsh-fs": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
-    "@deepseek-ai/dsh-system-prompt": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
-    "@deepseek-ai/dsh-tools": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
+    "@deepseek-ai/dsh-fs": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-system-prompt": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.5",
     "@deepseek-ai/schemastery": "3.19.0",
     "tsdown": "^0.10.0",
     "typescript": "^5.7.0"

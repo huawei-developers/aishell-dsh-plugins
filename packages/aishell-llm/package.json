@@ -41,21 +41,21 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.1.0",
-    "@deepseek-ai/dsh-attachment": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
-    "@deepseek-ai/dsh-brand": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
-    "@deepseek-ai/dsh-fs": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
-    "@deepseek-ai/dsh-llm": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3"
+    "@deepseek-ai/dsh-attachment": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-brand": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-fs": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.5"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.1.0",
     "@deepseek-ai/cordis-plugin-loader": "^1.1.0",
-    "@deepseek-ai/dsh-attachment": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
-    "@deepseek-ai/dsh-brand": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
-    "@deepseek-ai/dsh-client-locale": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
-    "@deepseek-ai/dsh-client-ui-settings": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
-    "@deepseek-ai/dsh-client-ui-slots": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
-    "@deepseek-ai/dsh-fs": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
-    "@deepseek-ai/dsh-llm": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3",
+    "@deepseek-ai/dsh-attachment": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-brand": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-locale": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-ui-settings": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-fs": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.5",
     "@deepseek-ai/schemastery": "3.19.0"
   },
   "dsh": {

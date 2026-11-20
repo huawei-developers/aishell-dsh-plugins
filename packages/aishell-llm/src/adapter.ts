@@ -72,9 +72,10 @@ const RETRY_MAX_DELAY_MS = 16_000
  *
  * Absent on purpose: the unclassified 4xx codes (`` `HTTP_${status}` `` — a 4xx
  * that is not a rate limit is a statement about the request, a bad model id or
- * a malformed body, and repeating it returns the same answer), and
+ * a malformed body, and repeating it returns the same answer),
  * `MISSING_CREDENTIAL` / `INVALID_CREDENTIAL` (a retry cannot conjure a
- * credential).
+ * credential), and `CONTENT_REFUSED` (the provider has judged the request, and
+ * asking again asks the same question).
  */
 const RETRYABLE_CODES = ['RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT', 'EMPTY_RESPONSE'] as const
 

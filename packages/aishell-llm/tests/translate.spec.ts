@@ -154,6 +154,65 @@ describe('translate — finish reasons', () => {
   })
 })
 
+describe('translate — a refusal names the code the harness routes on', () => {
+  /**
+   * The finish reason for one stream that ends on `finish_reason`.
+   *
+   * @param finishReason - the wire stop reason to report, in the shape the
+   *   provider sends it: a spelling, or `null` for a field written and left
+   *   empty.
+   */
+  const finishFor = async (
+    finishReason: string | null,
+  ): Promise<Extract<StreamChunk, { type: 'finish' }>['reason']> => {
+    const out = await collect(payloads([
+      JSON.stringify({ choices: [{ delta: { content: 'partial' } }] }),
+      JSON.stringify({ choices: [{ finish_reason: finishReason }] }),
+      '[DONE]',
+    ]))
+    return (lastChunk(out) as Extract<StreamChunk, { type: 'finish' }>).reason
+  }
+
+  it('maps the OpenAI spelling to CONTENT_REFUSED', async () => {
+    // `content_filter` is what an OpenAI-compatible provider sends when it
+    // withholds an answer; the gateway speaks that protocol.
+    const reason = await finishFor('content_filter')
+    expect(reason).toMatchObject({ kind: 'error', failure: { code: 'CONTENT_REFUSED' } })
+  })
+
+  it('maps the Anthropic spelling to the same code', async () => {
+    // Two spellings, one meaning. A provider reached through a translating
+    // endpoint can send either, and the harness routes refusals by the code.
+    const reason = await finishFor('refusal')
+    expect(reason).toMatchObject({ kind: 'error', failure: { code: 'CONTENT_REFUSED' } })
+  })
+
+  it('keeps the wire spelling in the message', async () => {
+    // The code says what class of failure this is; the message says which
+    // upstream said it, which an operator reading a log needs.
+    const reason = await finishFor('content_filter')
+    expect(reason).toMatchObject({ kind: 'error' })
+    expect((reason as Extract<typeof reason, { kind: 'error' }>).failure.message).toContain('content_filter')
+  })
+
+  it('names an unrecognised reason with a code the harness defines', async () => {
+    // The code has to be a member of the harness vocabulary — a code invented
+    // from the spelling matches no retry policy and no client wording.
+    const reason = await finishFor('something_new')
+    expect(reason).toMatchObject({ kind: 'error', failure: { code: 'INVALID_RESPONSE' } })
+    expect((reason as Extract<typeof reason, { kind: 'error' }>).failure.message).toContain('something_new')
+  })
+
+  it('treats a finish reason the provider left null as a clean stop', async () => {
+    // `finish_reason: null` is a field written and left empty. The call site
+    // reports a reason only when it is truthy, so this is the same stream as
+    // one that named none — and the adapter answers it the same way rather
+    // than inventing a failure from an empty field.
+    const reason = await finishFor(null)
+    expect(reason).toEqual({ kind: 'stop' })
+  })
+})
+
 describe('translate — an empty stream is a failure, not a silent turn', () => {
   // A gateway that drops the upstream connection mid-turn, or a proxy that
   // replaces the body, can settle the SSE stream cleanly with nothing in it.

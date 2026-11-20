@@ -14,7 +14,7 @@
 
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { LlmError } from '@deepseek-ai/dsh-llm'
-import type { FinishReason, StreamChunk, TokenUsage, ToolCallId, ContentBlock } from '@deepseek-ai/dsh-llm'
+import type { BuiltinLlmFailureCode, FinishReason, StreamChunk, TokenUsage, ToolCallId, ContentBlock } from '@deepseek-ai/dsh-llm'
 import { DONE } from './sse.ts'
 import type { WireChunk } from './types.ts'
 
@@ -27,14 +27,54 @@ interface OpenBlock {
   name: string | undefined
 }
 
-/** Map the wire finish_reason vocabulary to the harness FinishReason. */
-function mapFinishReason(reason: string | null | undefined): FinishReason {
+/**
+ * Map the wire finish_reason vocabulary to the harness FinishReason.
+ *
+ * ## Why every arm names a code the harness defines
+ *
+ * The failure code is what the runtime routes on: the retry policy decides
+ * whether to repeat, and the client picks the message it shows. A code the
+ * harness does not define matches neither, so a refusal spelled
+ * `CONTENT_FILTER` reads as an unrecognised failure — retried like a transport
+ * fault, and reported with no wording of its own.
+ *
+ * ## Refusals
+ *
+ * A provider that declines to answer says so through its stop reason, and the
+ * two spellings in play are `content_filter` (OpenAI-compatible, which is what
+ * the gateway speaks) and `refusal` (Anthropic's). Both mean the same thing to
+ * the harness, so both map to `CONTENT_REFUSED` — the code that names a
+ * response withheld by content review. The stop reason itself is kept in the
+ * message, because which upstream refused is a fact an operator reading a log
+ * wants and the code alone does not carry.
+ *
+ * @param reason - the wire `finish_reason`, already narrowed to a spelling:
+ *   the call site reports one only when the field is truthy, so a `null` the
+ *   provider wrote leaves the stream to `finish: stop`.
+ * @returns the harness finish reason.
+ */
+function mapFinishReason(reason: string): FinishReason {
   switch (reason) {
     case 'stop': return { kind: 'stop' }
     case 'tool_calls': return { kind: 'tool-calls' }
     case 'length': return { kind: 'max-tokens' }
+    case 'content_filter':
+    case 'refusal':
+      return {
+        kind: 'error',
+        failure: { message: `model declined to answer (${reason})`, code: 'CONTENT_REFUSED' satisfies BuiltinLlmFailureCode },
+      }
     default:
-      return { kind: 'error', failure: { message: `model stopped: ${reason ?? 'unknown'}`, code: (reason ?? 'unknown').toUpperCase() } }
+      // A spelling this adapter has not seen. The message keeps the wire value
+      // for diagnosis; the code names the class the harness knows, rather than
+      // inventing one from the text.
+      return {
+        kind: 'error',
+        failure: {
+          message: `model stopped for an unrecognised reason: ${String(reason)}`,
+          code: 'INVALID_RESPONSE' satisfies BuiltinLlmFailureCode,
+        },
+      }
   }
 }
 

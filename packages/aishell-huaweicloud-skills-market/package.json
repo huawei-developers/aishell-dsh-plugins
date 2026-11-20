@@ -1,7 +1,7 @@
 {
   "name": "@huaweidevtools/aishell-dsh-huaweicloud-skills-market",
   "description": "Browse and install Huawei Cloud's official agent skills from inside AI Shell — a Plugins-page tab over the huaweicloud/huaweicloud-skills catalogue",
-  "version": "0.0.37",
+  "version": "0.0.38",
   "publishConfig": {
     "access": "public"
   },
